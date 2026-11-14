@@ -7,11 +7,12 @@ import { Header } from './components/Header.tsx'
 import { NoticeToast } from './components/NoticeToast.tsx'
 import { PermissionModeWindow } from './components/PermissionModeWindow.tsx'
 import { HistoryPicker } from './components/HistoryPicker.tsx'
+import { ModelsWindow } from './components/ModelsWindow.tsx'
 import { PromptPanel } from './components/PromptPanel.tsx'
 import { Rail } from './components/Rail.tsx'
 import { SetupWizard } from './components/SetupWizard.tsx'
 import { Transcript } from './components/Transcript.tsx'
-import { opensPermissionsWindow } from './state/permissionModes.ts'
+import { opensModelsWindow, opensPermissionsWindow } from './state/commandSurfaces.ts'
 import { useEngine } from './state/useEngine.ts'
 
 /** The terminal folds its rail below this many columns of available width. */
@@ -67,7 +68,10 @@ export function App(): React.JSX.Element {
   const [railOverlayOpen, setRailOverlayOpen] = useState(false)
   // The Permissions window (S20) is read-only: it shows the saved default and the four
   // modes' meaning; it is opened from the Gentle row and by the engine's mode commands.
+  // The Models window (S21) is the engine's profile store, opened from the Gentle row
+  // and by the bare profiles command.
   const [permissionsOpen, setPermissionsOpen] = useState(false)
+  const [modelsOpen, setModelsOpen] = useState(false)
 
   const bodyRef = useRef<HTMLDivElement | null>(null)
   const columns = useAvailableColumns(bodyRef)
@@ -107,6 +111,7 @@ export function App(): React.JSX.Element {
           setHistoryOpen(false)
           setGentleOpen(false)
           setPermissionsOpen(false)
+          setModelsOpen(false)
           setAgentsOpen((open) => !open)
         } else if (key === 'k') {
           event.preventDefault()
@@ -114,6 +119,7 @@ export function App(): React.JSX.Element {
           setHistoryOpen(false)
           setAgentsOpen(false)
           setPermissionsOpen(false)
+          setModelsOpen(false)
           setGentleOpen((open) => !open)
         }
         return
@@ -127,6 +133,7 @@ export function App(): React.JSX.Element {
         setWizardOpen(false)
         setGentleOpen(false)
         setPermissionsOpen(false)
+        setModelsOpen(false)
         setPaletteSeed('')
         setPaletteOpen((open) => !open)
         return
@@ -137,6 +144,7 @@ export function App(): React.JSX.Element {
         setPaletteOpen(false)
         setHistoryOpen(false)
         setPermissionsOpen(false)
+        setModelsOpen(false)
         setWizardOpen(true)
         return
       }
@@ -145,11 +153,13 @@ export function App(): React.JSX.Element {
         event.preventDefault()
         setPaletteOpen(false)
         setPermissionsOpen(false)
+        setModelsOpen(false)
         setHistoryOpen((open) => !open)
       } else if (key === 'p') {
         event.preventDefault()
         setHistoryOpen(false)
         setPermissionsOpen(false)
+        setModelsOpen(false)
         setPaletteSeed('')
         setPaletteOpen((open) => !open)
       }
@@ -188,6 +198,17 @@ export function App(): React.JSX.Element {
     setPermissionsOpen(true)
   }, [])
 
+  const openModels = useCallback(() => {
+    // The Gentle row and the bare profiles command land here: overlays never stack,
+    // so the other windows close first (S21).
+    setPaletteOpen(false)
+    setHistoryOpen(false)
+    setGentleOpen(false)
+    setAgentsOpen(false)
+    setPermissionsOpen(false)
+    setModelsOpen(true)
+  }, [])
+
   const openPalette = useCallback(() => {
     setGentleOpen(false)
     setHistoryOpen(false)
@@ -206,19 +227,24 @@ export function App(): React.JSX.Element {
   }, [])
 
   // Running a command goes through the ordinary prompt path, so the turn starts
-  // exactly as if the user had typed `/<name>` themselves — except the permission
-  // mode commands (S20): over RPC the engine can only answer "Mode unchanged —
-  // interactive primary session required", so a turn that just prints that notice
-  // tells nothing the Permissions window cannot. They open the window instead.
+  // exactly as if the user had typed `/<name>` themselves — except the commands the
+  // app shows better than the engine can answer over RPC: the permission mode commands
+  // (S20) only print "Mode unchanged — interactive primary session required", and the
+  // bare profiles command (S21) is the Models window's own surface. They open their
+  // windows instead; every other command, including the profiles subcommands, runs.
   const runCommand = useCallback(
     (command: string) => {
       if (opensPermissionsWindow(command)) {
         openPermissions()
         return
       }
+      if (opensModelsWindow(command)) {
+        openModels()
+        return
+      }
       engine.send(command)
     },
-    [engine, openPermissions]
+    [engine, openPermissions, openModels]
   )
 
   const switchSession = useCallback(
@@ -295,7 +321,7 @@ export function App(): React.JSX.Element {
       {gentleOpen ? (
         <GentleView
           onClose={() => setGentleOpen(false)}
-          onRunCommand={runCommand}
+          onOpenModels={openModels}
           onOpenSubagents={() => setAgentsOpen(true)}
           onOpenProviders={openWizard}
           onOpenCommands={openPalette}
@@ -309,6 +335,7 @@ export function App(): React.JSX.Element {
         <CommandPalette initialQuery={paletteSeed} onClose={closePalette} onRun={runCommand} />
       ) : null}
       {permissionsOpen ? <PermissionModeWindow savedDefault={engine.permissionMode} onClose={() => setPermissionsOpen(false)} /> : null}
+      {modelsOpen ? <ModelsWindow onClose={() => setModelsOpen(false)} /> : null}
       {agentsOpen ? <AgentsView activity={engine.activity} onClose={() => setAgentsOpen(false)} /> : null}
       {wizardOpen ? <SetupWizard onClose={closeWizard} /> : null}
     </div>
