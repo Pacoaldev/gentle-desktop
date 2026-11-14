@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 500" width="920" height="500" role="img" aria-labelledby="flowTitle flowDesc" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+  <title id="flowTitle">One turn, and the dialog round trip</title>
+  <desc id="flowDesc">A prompt travels from the composer through the main process to the engine. While the turn runs, an extension asks the host for input with an extension_ui_request, the app renders it as a dialog, the answer returns as an extension_ui_response, and the turn continues.</desc>
+
+  <rect x="0" y="0" width="920" height="500" rx="16" fill="#f6f8fa"/>
+  <text x="40" y="44" font-size="12" font-weight="700" fill="#57606a" letter-spacing="1.2">ONE TURN, AND THE DIALOG ROUND TRIP</text>
+
+  <!-- actors: centers 165, 460, 755 -->
+  <rect x="40" y="62" width="250" height="40" rx="9" fill="#ffffff" stroke="#d0d7de" stroke-width="1.5"/>
+  <text x="165" y="88" font-size="14" font-weight="700" fill="#1f2328" text-anchor="middle">You</text>
+
+  <rect x="335" y="62" width="250" height="40" rx="9" fill="#ffffff" stroke="#d0d7de" stroke-width="1.5"/>
+  <text x="460" y="88" font-size="14" font-weight="700" fill="#1f2328" text-anchor="middle">App — renderer + main</text>
+
+  <rect x="630" y="62" width="250" height="40" rx="9" fill="#ffffff" stroke="#d0d7de" stroke-width="1.5"/>
+  <text x="755" y="88" font-size="14" font-weight="700" fill="#1f2328" text-anchor="middle">Engine — pi + extensions</text>
+  <line x1="40" y1="112" x2="880" y2="112" stroke="#d0d7de" stroke-width="1"/>
+
+  <!-- lifelines -->
+  <g stroke="#d0d7de" stroke-width="1" stroke-dasharray="3 5">
+    <line x1="165" y1="130" x2="165" y2="462"/>
+    <line x1="460" y1="130" x2="460" y2="462"/>
+    <line x1="755" y1="130" x2="755" y2="462"/>
+  </g>
+
+
+  <g font-size="13">
+    <line x1="173" y1="156" x2="444" y2="156" stroke="#0969da" stroke-width="2"/>
+    <path d="M438 151 L444 156 L438 161" fill="none" stroke="#0969da" stroke-width="2"/>
+    <text x="180" y="146" fill="#57606a" text-anchor="start">prompt, typed in the composer</text>
+    <line x1="468" y1="204" x2="739" y2="204" stroke="#0969da" stroke-width="2"/>
+    <path d="M733 199 L739 204 L733 209" fill="none" stroke="#0969da" stroke-width="2"/>
+    <text x="475" y="194" fill="#57606a" text-anchor="start">prompt as one JSON line on stdin</text>
+    <line x1="747" y1="252" x2="476" y2="252" stroke="#1a7f37" stroke-width="2"/>
+    <path d="M482 247 L476 252 L482 257" fill="none" stroke="#1a7f37" stroke-width="2"/>
+    <text x="740" y="242" fill="#57606a" text-anchor="end">events: text deltas, tool cards, usage</text>
+    <line x1="747" y1="300" x2="476" y2="300" stroke="#9a6700" stroke-width="2"/>
+    <path d="M482 295 L476 300 L482 305" fill="none" stroke="#9a6700" stroke-width="2"/>
+    <text x="740" y="290" fill="#9a6700" font-weight="600" text-anchor="end">extension_ui_request — select, confirm, input</text>
+    <line x1="452" y1="348" x2="181" y2="348" stroke="#9a6700" stroke-width="2"/>
+    <path d="M187 343 L181 348 L187 353" fill="none" stroke="#9a6700" stroke-width="2"/>
+    <text x="445" y="338" fill="#9a6700" font-weight="600" text-anchor="end">a dialog window, answered or cancelled</text>
+    <line x1="173" y1="396" x2="444" y2="396" stroke="#0969da" stroke-width="2"/>
+    <path d="M438 391 L444 396 L438 401" fill="none" stroke="#0969da" stroke-width="2"/>
+    <text x="180" y="386" fill="#57606a" text-anchor="start">the answer</text>
+    <line x1="468" y1="444" x2="739" y2="444" stroke="#0969da" stroke-width="2"/>
+    <path d="M733 439 L739 444 L733 449" fill="none" stroke="#0969da" stroke-width="2"/>
+    <text x="475" y="434" fill="#57606a" text-anchor="start">extension_ui_response — value, confirmed or cancelled</text>
+  </g>
+
+  <text x="40" y="484" font-size="12.5" fill="#8c959f">An unanswered dialog blocks its extension forever, so the app queues dialogs and always offers cancel. The turn continues after the answer.</text>
+</svg>

@@ -58,20 +58,7 @@ remembers the answer; later launches open that folder without asking.
 
 ## How it works
 
-```
-┌──────────────────────────────┐
-│ renderer (React)             │  transcript, tool cards, dialogs, composer
-└──────────────┬───────────────┘
-               │ contextBridge (typed, no Node in the renderer)
-┌──────────────▼───────────────┐
-│ main (Electron, Node)        │  supervision, session listing, framing, config writes
-└──────────────┬───────────────┘
-               │ stdin/stdout, newline-delimited JSON
-┌──────────────▼───────────────┐
-│ pi --mode rpc                │  the engine, with gentle-pi extensions loaded
-│  GENTLE_SHELL_INTERACTIVE_HOST=1
-└──────────────────────────────┘
-```
+![Architecture: React renderer, Electron main, and one pi --mode rpc child](docs/architecture.svg)
 
 The engine is not reimplemented. `pi --mode rpc` is a documented bidirectional protocol,
 and `GENTLE_SHELL_INTERACTIVE_HOST=1` is the flag gentle-pi already reads to route
@@ -87,6 +74,21 @@ Three consequences worth knowing:
   reads the session files and reopens one with `switch_session`.
 - **Framing is LF-only.** Records are split on `\n` and nothing else; Node's `readline` also
   splits on U+2028/U+2029 and corrupts message payloads.
+
+### One turn, and the dialog round trip
+
+![A prompt travels to the engine; an extension asks for input with extension_ui_request and the answer returns as extension_ui_response](docs/turn-dialog-flow.svg)
+
+An unanswered dialog blocks its extension forever, so the app queues dialogs, presents them
+one at a time, and always offers cancel.
+
+## Folders and sessions
+
+![Launch, first run and later folder changes](docs/folder-lifecycle.svg)
+
+A session works in one folder. Changing the folder is a new piece of work, not a move: the
+engine starts a session of its own there, and the previous conversation stays on disk as
+history instead of being carried over.
 
 ## Where things live
 
@@ -181,6 +183,7 @@ message — Windows refuses to replace a mapped executable, and nothing warns yo
 | `src/shared/ipc.ts` | the main↔renderer contract |
 | `src/renderer/` | the React surface |
 | `odd/tasks/gentle-desktop.md` | the specification, task list and decision log for this fork |
+| `docs/` | the architecture, dialog-flow and folder-lifecycle diagrams in this README |
 | `design/` | the design system and the layout artboards this surface was built from |
 
 ## Upstream relationship
