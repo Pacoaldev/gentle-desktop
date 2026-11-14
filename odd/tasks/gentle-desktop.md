@@ -105,6 +105,20 @@ S17. The folder the agent works in is always visible, and the user can change it
     User's words: "acabo de caer en cuenta de un error, no se esta mostrando que carpeta en la
     que se va trabajar".
 
+S18. Choosing a different folder is a new piece of work, not a move: the engine starts a
+    fresh session in the chosen folder, and the active session ends there. The conversation
+    the previous folder had is not carried over — it stays on disk as history, reachable the
+    same way as any other saved session. The app still opens the folder used last, and the
+    folder picker stays available from the header and the menu. Choosing the folder the
+    agent is already in changes nothing: no restart, no new session. When the engine cannot
+    start in the chosen folder, the previous folder keeps working with its conversation
+    intact, and the user is told why.
+
+    User's words: "seguiremos con la configuracion de selecion de carpeta, al iniciar la app,
+    se iniciara la ultima carpeta que se uso, se dara la opcion de cambiar la carpeta, al
+    mometno de selecionar una carpeta diferente se iniciara una nueva sesion y se dara por
+    termiando la sesion activa".
+
 S7. The engine is consumed, not copied: the app launches the published `pi` runtime with
     gentle-pi's extensions enabled and `GENTLE_SHELL_INTERACTIVE_HOST=1`, so upstream
     engine fixes remain reachable. Engine code is vendored only for a patch that cannot
@@ -151,8 +165,10 @@ T31. [x] Read subscription usage from the provider's own quota endpoint with the
 T35. [x] Render subscription usage and the `sub` billing marker in the top bar. — S11
 T56. Render assistant output as Markdown: parser, React renderer without raw HTML, and a
     small fenced-code highlighter. User text stays literal. — S15
-T109. Show the working folder in the header and let the user pick another one, with the
-    choice remembered across launches. — S17
+T109. [x] Show the working folder in the header and let the user pick another one, with the
+    choice remembered across launches. Done in 71a31ee. — S17
+T110. Start a fresh session when the user picks a different folder, leaving the previous
+    conversation on disk; keep the app opening the last used folder. — S18
 T13. Support providers that need a custom base URL by writing pi's own configuration,
     instead of asking the user to edit files. — S10
 T10. Distribution: installers a non-technical person can run, plus a short first-run guide
@@ -305,3 +321,10 @@ L19. User report, verbatim: "acabo de caer en cuenta de un error, no se esta mos
     carpeta en la que se va trabajar". The header rendered the folder name only when the
     engine reported a cwd, and the packaged app runs from its own installation directory,
     so the value was either meaningless or empty.
+
+L20. User requirement, verbatim: "seguiremos con la configuracion de selecion de carpeta, al
+    iniciar la app, se iniciara la ultima carpeta que se uso, se dara la opcion de cambiar la
+    carpeta, al mometno de selecionar una carpeta diferente se iniciara una nueva sesion y se
+    dara por termiando la sesion activa". Opening the last used folder and offering the picker
+    already shipped (71a31ee); the new rule is that a folder change starts a new session
+    instead of carrying the open conversation into the new folder.

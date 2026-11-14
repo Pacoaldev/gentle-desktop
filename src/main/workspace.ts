@@ -45,6 +45,15 @@ function foldCase(path: string): string {
   return process.platform === 'win32' ? path.toLowerCase() : path
 }
 
+/**
+ * True when both paths name the same folder (S18). Picking the folder the agent is already
+ * in is not a folder change: it must not restart the engine or start a new session, so the
+ * comparison folds separators, a trailing one, and case on Windows.
+ */
+export function sameFolder(a: string, b: string): boolean {
+  return foldCase(normalizePath(a)) === foldCase(normalizePath(b))
+}
+
 /** True when `cwd` is the application's own directory or somewhere inside it. */
 function sameOrInside(cwd: string, appDir: string): boolean {
   const normalizedCwd = foldCase(normalizePath(cwd))

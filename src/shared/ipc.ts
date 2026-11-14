@@ -270,12 +270,14 @@ export interface AuthLoginRequest {
 export type AuthLoginResult = { ok: true } | { ok: false; error: string; cancelled?: boolean }
 
 /**
- * Outcome of choosing a working folder (S17). `changed` carries the folder now in use;
- * `failed` carries the reason and the folder that keeps working instead. The error text
- * never repeats the full path — the header tooltip is the only place that appears.
+ * Outcome of choosing a working folder (S17, S18). `changed` carries the folder now in use
+ * and means a fresh session started there; `unchanged` means the user picked the folder the
+ * agent is already in, so nothing restarted; `failed` carries the reason and the folder that
+ * keeps working instead. The error text never repeats the full path — the header tooltip is
+ * the only place that appears.
  */
 export interface WorkspaceChangeResult {
-  outcome: 'changed' | 'cancelled' | 'failed'
+  outcome: 'changed' | 'unchanged' | 'cancelled' | 'failed'
   cwd?: string
   error?: string
 }

@@ -6,6 +6,7 @@ import { afterEach, test } from 'node:test'
 import {
   APP_FOLDER_LABEL,
   readRememberedWorkspace,
+  sameFolder,
   workspaceLabel,
   writeRememberedWorkspace
 } from '../src/main/workspace.ts'
@@ -70,8 +71,7 @@ test('a path with no last segment still shows something identifiable', () => {
   assert.equal(root.fullPath, '/')
 })
 
-test('the remembered folder record: valid, missing, unreadable or malformed', () => {
-  const stateDir = scratch()
+test('the remembered folder record: valid, missing, unreadable or malformed', () => {  const stateDir = scratch()
   assert.equal(readRememberedWorkspace(stateDir), null, 'a missing record is no choice yet')
 
   const folder = join(stateDir, 'projects', 'demo')
@@ -89,4 +89,16 @@ test('the remembered folder record: valid, missing, unreadable or malformed', ()
   // so the app falls back to its default instead of starting an engine that cannot run.
   writeFileSync(join(stateDir, 'workspace.json'), JSON.stringify({ folder: join(stateDir, 'deleted') }))
   assert.equal(readRememberedWorkspace(stateDir), null, 'a record for a deleted folder is no choice yet')
+})
+
+test('the folder the agent is already in counts as the same folder, however it is written', () => {
+  assert.equal(sameFolder('/work/demo', '/work/demo'), true)
+  assert.equal(sameFolder('/work/demo/', '/work/demo'), true, 'a trailing separator is the same folder')
+  assert.equal(sameFolder(String.raw`C:\work\demo`, 'C:/work/demo/'), true, 'the other separator is the same folder')
+  assert.equal(sameFolder('/work/demo', '/work/demo/sub'), false, 'a subfolder is a different folder')
+  assert.equal(sameFolder('/work/demo', '/work/other'), false)
+
+  // Case is part of the name everywhere except Windows, where the filesystem ignores it.
+  const caseFolded = process.platform === 'win32'
+  assert.equal(sameFolder(String.raw`C:\Work\Demo`, String.raw`c:\work\demo`), caseFolded)
 })
