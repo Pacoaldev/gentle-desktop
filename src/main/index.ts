@@ -1,5 +1,5 @@
 import { dirname, join } from 'node:path'
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell, type OpenDialogOptions } from 'electron'
 import {
   IPC,
   type AuthLoginRequest,
@@ -29,6 +29,7 @@ import { PiHost } from './rpc/host.ts'
 import { listSessions } from './sessions.ts'
 import {
   applicationDirectory,
+  chooseStartFolder,
   readRememberedWorkspace,
   writeRememberedWorkspace,
   workspaceLabel
@@ -59,6 +60,39 @@ function decorateStatus(status: HostStatus): HostStatus {
   const label = workspaceLabel(status.cwd, APP_DIRECTORY)
   if (label === null) return status
   return { ...status, cwdLabel: label.name }
+}
+
+/**
+ * Opens the system's own folder picker. The main process is the only side allowed to do
+ * this, and it is shared by the two moments that need it: the first-run question (S19),
+ * where there is no window yet, and a later folder change from the window that asked.
+ */
+async function showFolderPicker(owner: BrowserWindow | null, current: string | null): Promise<string | null> {
+  // `defaultPath` must be absent when there is no folder yet, not set to undefined.
+  const options: OpenDialogOptions = {
+    title: current === null ? 'Choose a folder to work in' : 'Choose a folder',
+    buttonLabel: current === null ? 'Work in this folder' : 'Choose this folder',
+    ...(current !== null ? { defaultPath: current } : {}),
+    properties: ['openDirectory', 'createDirectory']
+  }
+  const picked =
+    owner !== null && !owner.isDestroyed()
+      ? await dialog.showOpenDialog(owner, options)
+      : await dialog.showOpenDialog(options)
+
+  const folder = picked.filePaths[0]
+  return picked.canceled || folder === undefined ? null : folder
+}
+
+/** Remembers a folder the engine actually started in; a failed write only costs the next launch its default. */
+function rememberWorkspace(folder: string): void {
+  try {
+    writeRememberedWorkspace(stateDir(), folder)
+  } catch (error) {
+    process.stderr.write(
+      `[workspace] cannot remember the folder: ${error instanceof Error ? error.message : String(error)}\n`
+    )
+  }
 }
 
 function broadcast(channel: string, payload: unknown): void {
@@ -104,33 +138,17 @@ function registerIpc(instance: PiHost): void {
   ipcMain.handle(IPC.hostRestart, async () => decorateStatus(await instance.restart()))
 
   ipcMain.handle(IPC.workspaceChoose, async (event): Promise<WorkspaceChangeResult> => {
-    const current = instance.status().cwd
-    // `defaultPath` must be absent when there is no folder yet, not set to undefined.
-    const options = {
-      title: 'Choose a folder',
-      buttonLabel: 'Choose this folder',
-      ...(current !== undefined ? { defaultPath: current } : {}),
-      properties: ['openDirectory', 'createDirectory'] as Array<'openDirectory' | 'createDirectory'>
-    }
     // The picker belongs to the window that asked for it, so it centres on that window.
     const owner = BrowserWindow.fromWebContents(event.sender)
-    const picked = owner !== null && !owner.isDestroyed() ? await dialog.showOpenDialog(owner, options) : await dialog.showOpenDialog(options)
-
-    const folder = picked.filePaths[0]
-    if (picked.canceled || folder === undefined) return { outcome: 'cancelled' }
+    const folder = await showFolderPicker(owner, instance.status().cwd ?? null)
+    if (folder === null) return { outcome: 'cancelled' }
 
     const change = await instance.changeDirectory(folder)
     if (change.outcome !== 'changed') return change
 
     // Only a folder the engine actually started in is remembered; a failed start must
     // not survive an app restart.
-    try {
-      writeRememberedWorkspace(stateDir(), folder)
-    } catch (error) {
-      // The session works in the chosen folder either way; the choice is simply not
-      // remembered for the next launch, which the next picker can redo.
-      process.stderr.write(`[workspace] cannot remember the folder: ${error instanceof Error ? error.message : String(error)}\n`)
-    }
+    rememberWorkspace(folder)
     return change
   })
 
@@ -319,19 +337,37 @@ function createWindow(): BrowserWindow {
 // installer registers; the two strings are the only copy of this identity.
 app.setAppUserModelId('dev.gentledesktop.app')
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   host = createHost()
   registerIpc(host)
-  createWindow()
 
   // The user's remembered choice wins over the environment override: it is the folder
-  // they picked on purpose. With no choice yet (S17, first run) the default still stands,
-  // but the header now says when that default is the application's own directory.
-  const remembered = readRememberedWorkspace(stateDir())
-  const cwd = remembered ?? process.env['GENTLE_DESKTOP_CWD'] ?? process.cwd()
+  // they picked on purpose. With no choice yet (S17, first run) and no override, the app
+  // asks for a folder before it starts (S19): working in its own installation directory
+  // is not something a person can make sense of. A cancelled picker still launches, and
+  // the header says plainly that the folder is the app's own.
+  const startFolder = await chooseStartFolder({
+    remembered: readRememberedWorkspace(stateDir()),
+    override: process.env['GENTLE_DESKTOP_CWD'] ?? null,
+    fallback: process.cwd(),
+    ask: async () => {
+      try {
+        return await showFolderPicker(null, null)
+      } catch (error) {
+        process.stderr.write(
+          `[workspace] cannot ask for a folder: ${error instanceof Error ? error.message : String(error)}\n`
+        )
+        return null
+      }
+    }
+  })
+  if (startFolder.remember) rememberWorkspace(startFolder.folder)
 
-  // The engine starts with the app: the window is the only surface the user needs.
-  host.start({ cwd, moduleBase: __dirname })
+  // The engine starts before the window exists, so the window's first questions always
+  // reach a child instead of a stopped host — a window that mounts first logs failed
+  // session queries while the folder question is still open.
+  host.start({ cwd: startFolder.folder, moduleBase: __dirname })
+  createWindow()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { afterEach, test } from 'node:test'
 import {
   APP_FOLDER_LABEL,
+  chooseStartFolder,
   readRememberedWorkspace,
   sameFolder,
   workspaceLabel,
@@ -101,4 +102,49 @@ test('the folder the agent is already in counts as the same folder, however it i
   // Case is part of the name everywhere except Windows, where the filesystem ignores it.
   const caseFolded = process.platform === 'win32'
   assert.equal(sameFolder(String.raw`C:\Work\Demo`, String.raw`c:\work\demo`), caseFolded)
+})
+
+
+test('a first launch with no remembered folder asks for one and remembers the answer', async () => {
+  let asked = 0
+  const chosen = await chooseStartFolder({
+    remembered: null,
+    override: null,
+    fallback: '/app',
+    ask: async () => {
+      asked += 1
+      return '/picked'
+    }
+  })
+
+  assert.deepEqual(chosen, { folder: '/picked', remember: true }, 'the chosen folder is started in and written down')
+  assert.equal(asked, 1, 'the app asked exactly once')
+})
+
+test('a remembered folder or an explicit override starts without asking', async () => {
+  let asked = 0
+  const ask = async () => {
+    asked += 1
+    return '/picked'
+  }
+
+  assert.deepEqual(
+    await chooseStartFolder({ remembered: '/before', override: null, fallback: '/app', ask }),
+    { folder: '/before', remember: false },
+    'the folder used last wins'
+  )
+  assert.deepEqual(
+    await chooseStartFolder({ remembered: null, override: '/scripted', fallback: '/app', ask }),
+    { folder: '/scripted', remember: false },
+    'an explicit folder is an instruction, not a first run'
+  )
+  assert.equal(asked, 0, 'a question nobody needs is not asked')
+})
+
+test('a cancelled first-run picker launches in the default folder and remembers nothing', async () => {
+  assert.deepEqual(
+    await chooseStartFolder({ remembered: null, override: null, fallback: '/app', ask: async () => null }),
+    { folder: '/app', remember: false },
+    'cancelling launches, but nothing is remembered that the user did not choose'
+  )
 })

@@ -129,3 +129,37 @@ export function writeRememberedWorkspace(stateDir: string, folder: string): void
   mkdirSync(stateDir, { recursive: true })
   writeFileSync(join(stateDir, REMEMBERED_WORKSPACE_FILE), `${JSON.stringify({ folder }, null, 2)}\n`, 'utf8')
 }
+
+/** Where a launch starts, and whether that folder still has to be remembered (S19). */
+export interface StartFolder {
+  /** The folder the engine starts in. */
+  folder: string
+  /** True when the folder came from the first-run picker and must be written down. */
+  remember: boolean
+}
+
+/**
+ * Decides the folder a launch starts in (S19).
+ *
+ * A remembered folder wins. An explicit `GENTLE_DESKTOP_CWD` is an instruction, not the
+ * empty state a first run has, so it starts there without asking — scripted runs and the
+ * tests depend on a launch that never waits for a person. Otherwise the user is asked to
+ * choose a folder, because the app has nowhere meaningful to work yet; cancelling falls
+ * back to the default without remembering anything, so the next launch asks again instead
+ * of silently keeping a folder nobody chose.
+ */
+export async function chooseStartFolder(input: {
+  remembered: string | null
+  override: string | null
+  fallback: string
+  ask: () => Promise<string | null>
+}): Promise<StartFolder> {
+  if (input.remembered !== null) return { folder: input.remembered, remember: false }
+  if (input.override !== null && input.override.length > 0) {
+    return { folder: input.override, remember: false }
+  }
+
+  const picked = await input.ask()
+  if (picked === null || picked.length === 0) return { folder: input.fallback, remember: false }
+  return { folder: picked, remember: true }
+}
