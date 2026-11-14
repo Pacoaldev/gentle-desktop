@@ -18,7 +18,8 @@ export function GentleView({
   onOpenSubagents,
   onOpenProviders,
   onOpenCommands,
-  onChooseFolder
+  onChooseFolder,
+  onOpenPermissions
 }: {
   onClose: () => void
   /** Runs a command through the ordinary prompt path, as if it had been typed. */
@@ -28,6 +29,8 @@ export function GentleView({
   onOpenCommands: () => void
   /** Opens the system folder picker so the user can move the agent elsewhere (S17). */
   onChooseFolder: () => void
+  /** Opens the Permissions window (S20): the mode a new session starts with, read-only. */
+  onOpenPermissions: () => void
 }): React.JSX.Element {
   const [commands, setCommands] = useState<readonly CommandChoice[]>([])
   const [index, setIndex] = useState(0)
@@ -55,6 +58,9 @@ export function GentleView({
   const choose = useCallback(
     (destination: GentleDestination): void => {
       switch (destination.id) {
+        case 'mode':
+          onOpenPermissions()
+          break
         case 'subagents':
           onOpenSubagents()
           break
@@ -72,7 +78,7 @@ export function GentleView({
       }
       onClose()
     },
-    [onChooseFolder, onClose, onOpenCommands, onOpenProviders, onOpenSubagents, onRunCommand]
+    [onChooseFolder, onClose, onOpenCommands, onOpenPermissions, onOpenProviders, onOpenSubagents, onRunCommand]
   )
 
   // There is nothing to type into here, and `autoFocus` on a plain container is not

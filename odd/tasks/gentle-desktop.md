@@ -131,6 +131,20 @@ S19. With no folder remembered the app asks for one instead of opening in a fold
     User's words: "si la app no tiene una carpeta como ultima visitada se requiere que pida
     una carpeta para abrir".
 
+S20. The app never changes the session's permission mode, and says so instead of pretending
+    to. A Permissions window shows the four modes with the meaning the terminal gives them,
+    marks the mode saved as the default — the one a session started here begins with — and
+    states that raising the running session is reserved to an interactive terminal session.
+    The route that works is named exactly: `/gentle:mode default <mode>` in a terminal, which
+    the next session started here picks up. The Gentle row and the engine's mode commands
+    open this window instead of starting a turn that only prints a notice.
+
+    User's words: "continuemos con la creación de las ventanas flotantes, ya que aunque me
+    muestra las opciones no se estan mostrando las ventanas flotantes hijas de las opciones".
+    Evidence: gentle-pi `lib/yolo-session-policy.ts` gates `setMode` and `saveDefault` on
+    `interactive(ctx)` (ctx.mode === "tui"), so `/gentle:mode <mode>` answers "Mode unchanged"
+    over RPC, and the host-ui adapter path ends in the same gate.
+
 S7. The engine is consumed, not copied: the app launches the published `pi` runtime with
     gentle-pi's extensions enabled and `GENTLE_SHELL_INTERACTIVE_HOST=1`, so upstream
     engine fixes remain reachable. Engine code is vendored only for a patch that cannot
@@ -183,6 +197,8 @@ T110. Start a fresh session when the user picks a different folder, leaving the 
     conversation on disk; keep the app opening the last used folder. — S18
 T111. Ask for a folder on a launch that has none remembered, start in the chosen one and
     remember it; never block a launched app on the question. — S19
+T112. Show the permission modes and the saved default in a floating window that never claims
+    to change the running session, and route the mode commands there. — S20
 T13. Support providers that need a custom base URL by writing pi's own configuration,
     instead of asking the user to edit files. — S10
 T10. Distribution: installers a non-technical person can run, plus a short first-run guide
@@ -348,3 +364,11 @@ L21. User requirement, verbatim: "si la app no tiene una carpeta como ultima vis
     application's own directory and only said "this app's folder", which is a folder nobody
     chose. The first run now asks with the system's picker and remembers the answer; a
     cancelled picker still opens the app and asks again next time.
+
+L22. User requirement, verbatim: "continuemos con la creación de las ventanas flotantes, ya
+    que aunque me muestra las opciones no se estan mostrando las ventanas flotantes hijas de
+    las opciones para poder terminar de realizar los ajustes que requiere el usuario". The
+    surfaces the terminal opens with `ctx.ui.custom` cannot exist over RPC (pi returns
+    undefined there), so the first slice is permission mode: the engine grants elevated modes
+    only to an interactive terminal session, which makes the app a reader of the saved default
+    and the terminal the only place that changes it.

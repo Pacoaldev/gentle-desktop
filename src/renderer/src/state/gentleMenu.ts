@@ -5,10 +5,12 @@ import type { CommandChoice } from '../../../shared/ipc.ts'
  * pin it: the destinations a user reaches for when they want to change something about the
  * agent, resolved against the commands this engine actually exposes.
  *
- * Three of these are the app's own surfaces and always exist. The other two are engine
- * commands — profiles and permission mode — and they are only offered when the engine
- * reports the command. A row that runs a command the engine does not have is worse than a
- * missing row: the user presses it, a turn starts, and nothing happens.
+ * One of these — profiles — runs an engine command and is offered only when the engine
+ * reports it. Every other row is the app's own surface and always exists (the permission
+ * mode row opens a read-only window: the engine grants elevated modes only to an
+ * interactive terminal session, so this app cannot raise the running session). A row
+ * that runs a command the engine does not have is worse than a missing row: the user
+ * presses it, a turn starts, and nothing happens.
  */
 
 export type GentleDestinationId = 'profiles' | 'mode' | 'folder' | 'subagents' | 'providers' | 'commands'
@@ -56,17 +58,13 @@ export function resolveGentleDestinations(commands: readonly CommandChoice[]): G
     })
   }
 
-  const mode = findCommand(commands, /(^|[^a-z])(mode|permission)/)
-  if (mode !== null) {
-    destinations.push({
+  destinations.push(
+    {
       id: 'mode',
       label: 'Permission mode',
-      detail: 'Choose how often the agent asks before acting',
-      command: mode
-    })
-  }
-
-  destinations.push(
+      detail: 'See the mode new sessions start with, and how to change it',
+      command: null
+    },
     {
       id: 'folder',
       label: 'Choose a folder',

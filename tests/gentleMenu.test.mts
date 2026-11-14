@@ -5,19 +5,23 @@ import { resolveGentleDestinations } from '../src/renderer/src/state/gentleMenu.
 const profileCommand = { name: 'gentle:profiles', description: 'Choose an agent model profile' }
 const modeCommand = { name: 'gentle:permission', description: 'Set the permission mode' }
 
-test('profiles and mode appear only when the engine exposes them', () => {
+test('profiles is offered only when the engine exposes it; mode is always present', () => {
   const withCommands = resolveGentleDestinations([profileCommand, modeCommand])
   assert.deepEqual(
     withCommands.map((destination) => destination.id),
     ['profiles', 'mode', 'folder', 'subagents', 'providers', 'commands']
   )
   assert.equal(withCommands[0]?.command, 'gentle:profiles')
-  assert.equal(withCommands[1]?.command, 'gentle:permission')
+  assert.equal(
+    withCommands[1]?.command,
+    null,
+    'the mode row opens a read-only window, it does not start a turn'
+  )
 
   const withoutCommands = resolveGentleDestinations([])
   assert.deepEqual(
     withoutCommands.map((destination) => destination.id),
-    ['folder', 'subagents', 'providers', 'commands'],
+    ['mode', 'folder', 'subagents', 'providers', 'commands'],
     'a row that runs a command the engine does not have is worse than a missing row'
   )
 })
@@ -26,7 +30,11 @@ test('a destination is matched by command name, never by description', () => {
   const tempting = { name: 'gentle:review', description: 'Review the profile of the change' }
   const ids = resolveGentleDestinations([tempting]).map((destination) => destination.id)
 
-  assert.deepEqual(ids, ['folder', 'subagents', 'providers', 'commands'], 'a description is not an identity')
+  assert.deepEqual(
+    ids,
+    ['mode', 'folder', 'subagents', 'providers', 'commands'],
+    'a description is not an identity'
+  )
 })
 
 test('the app surfaces are always present, in a fixed order', () => {

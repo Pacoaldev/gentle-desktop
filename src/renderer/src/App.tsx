@@ -5,6 +5,7 @@ import { DialogHost } from './components/DialogHost.tsx'
 import { GentleView } from './components/GentleView.tsx'
 import { Header } from './components/Header.tsx'
 import { NoticeToast } from './components/NoticeToast.tsx'
+import { PermissionModeWindow } from './components/PermissionModeWindow.tsx'
 import { HistoryPicker } from './components/HistoryPicker.tsx'
 import { PromptPanel } from './components/PromptPanel.tsx'
 import { Rail } from './components/Rail.tsx'
@@ -63,6 +64,9 @@ export function App(): React.JSX.Element {
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [paletteSeed, setPaletteSeed] = useState('')
   const [railOverlayOpen, setRailOverlayOpen] = useState(false)
+  // The Permissions window (S20) is read-only: it shows the saved default and the four
+  // modes' meaning; it is opened from the Gentle row and by the engine's mode commands.
+  const [permissionsOpen, setPermissionsOpen] = useState(false)
 
   const bodyRef = useRef<HTMLDivElement | null>(null)
   const columns = useAvailableColumns(bodyRef)
@@ -101,12 +105,14 @@ export function App(): React.JSX.Element {
           setPaletteOpen(false)
           setHistoryOpen(false)
           setGentleOpen(false)
+          setPermissionsOpen(false)
           setAgentsOpen((open) => !open)
         } else if (key === 'k') {
           event.preventDefault()
           setPaletteOpen(false)
           setHistoryOpen(false)
           setAgentsOpen(false)
+          setPermissionsOpen(false)
           setGentleOpen((open) => !open)
         }
         return
@@ -119,6 +125,7 @@ export function App(): React.JSX.Element {
         setHistoryOpen(false)
         setWizardOpen(false)
         setGentleOpen(false)
+        setPermissionsOpen(false)
         setPaletteSeed('')
         setPaletteOpen((open) => !open)
         return
@@ -128,6 +135,7 @@ export function App(): React.JSX.Element {
         event.preventDefault()
         setPaletteOpen(false)
         setHistoryOpen(false)
+        setPermissionsOpen(false)
         setWizardOpen(true)
         return
       }
@@ -135,10 +143,12 @@ export function App(): React.JSX.Element {
       if (key === 'h') {
         event.preventDefault()
         setPaletteOpen(false)
+        setPermissionsOpen(false)
         setHistoryOpen((open) => !open)
       } else if (key === 'p') {
         event.preventDefault()
         setHistoryOpen(false)
+        setPermissionsOpen(false)
         setPaletteSeed('')
         setPaletteOpen((open) => !open)
       }
@@ -167,6 +177,16 @@ export function App(): React.JSX.Element {
     setHistoryOpen(true)
   }, [])
 
+  const openPermissions = useCallback(() => {
+    // The engine's mode commands and the Gentle row land here: overlays never stack,
+    // so the other windows close first (S20).
+    setPaletteOpen(false)
+    setHistoryOpen(false)
+    setGentleOpen(false)
+    setAgentsOpen(false)
+    setPermissionsOpen(true)
+  }, [])
+
   const openPalette = useCallback(() => {
     setGentleOpen(false)
     setHistoryOpen(false)
@@ -185,12 +205,20 @@ export function App(): React.JSX.Element {
   }, [])
 
   // Running a command goes through the ordinary prompt path, so the turn starts
-  // exactly as if the user had typed `/<name>` themselves.
+  // exactly as if the user had typed `/<name>` themselves — except the permission
+  // mode commands (S20): over RPC the engine can only answer "Mode unchanged —
+  // interactive primary session required", so a turn that just prints that notice
+  // tells nothing the Permissions window cannot. They open the window instead.
   const runCommand = useCallback(
     (command: string) => {
+      const name = command.startsWith('/') ? command.slice(1) : command
+      if (name === 'gentle:mode' || name.startsWith('gentle:mode ') || name === 'gentle:yolo' || name.startsWith('gentle:yolo ')) {
+        openPermissions()
+        return
+      }
       engine.send(command)
     },
-    [engine]
+    [engine, openPermissions]
   )
 
   const switchSession = useCallback(
@@ -274,11 +302,13 @@ export function App(): React.JSX.Element {
           onChooseFolder={() => {
             void engine.chooseWorkspace()
           }}
+          onOpenPermissions={openPermissions}
         />
       ) : null}
       {paletteOpen ? (
         <CommandPalette initialQuery={paletteSeed} onClose={closePalette} onRun={runCommand} />
       ) : null}
+      {permissionsOpen ? <PermissionModeWindow savedDefault={engine.permissionMode} onClose={() => setPermissionsOpen(false)} /> : null}
       {agentsOpen ? <AgentsView activity={engine.activity} onClose={() => setAgentsOpen(false)} /> : null}
       {wizardOpen ? <SetupWizard onClose={closeWizard} /> : null}
     </div>
