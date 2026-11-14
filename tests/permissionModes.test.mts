@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { PERMISSION_MODES, defaultModeCommand } from '../src/renderer/src/state/permissionModes.ts'
+import { PERMISSION_MODES, defaultModeCommand, opensPermissionsWindow } from '../src/renderer/src/state/permissionModes.ts'
 
 test('the modes are exactly the engine\'s four, in its menu order, with no duplicates', () => {
   assert.deepEqual(
@@ -35,4 +35,24 @@ test('the details are gentle-pi\'s menu strings, frozen literally', () => {
 test('the command that changes the saved default is named exactly', () => {
   assert.equal(defaultModeCommand('super-yolo'), '/gentle:mode default super-yolo')
   assert.equal(defaultModeCommand('normal'), '/gentle:mode default normal')
+})
+
+
+test('only the engine mode commands open the Permissions window', () => {
+  // These are the only commands whose RPC answer is the mode it already reports; every
+  // other command keeps the ordinary prompt path.
+  for (const command of ['/gentle:mode', '/gentle:yolo', 'gentle:mode', 'gentle:mode status', '/gentle:mode default yolo']) {
+    assert.equal(opensPermissionsWindow(command), true, `${command} opens the window`)
+  }
+
+  for (const command of [
+    '/gentle:profiles',
+    '/gentle:modex',
+    '/history',
+    '/gentle:review-mode',
+    '/gentle:permission',
+    '/gentle:agents'
+  ]) {
+    assert.equal(opensPermissionsWindow(command), false, `${command} stays on the prompt path`)
+  }
 })

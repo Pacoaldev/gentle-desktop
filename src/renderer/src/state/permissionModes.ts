@@ -30,3 +30,15 @@ export const PERMISSION_MODES: readonly PermissionModeChoice[] = [
 export function defaultModeCommand(mode: AgentPermissionMode): string {
   return `/gentle:mode default ${mode}`
 }
+
+/**
+ * True for the engine commands whose only useful answer over RPC is the mode it already
+ * reports. The palette routes them to the Permissions window instead of spending a turn
+ * on a notice; every other command keeps the ordinary prompt path. Matching is by exact
+ * name, with or without the leading slash and with arguments allowed, so a command that
+ * merely mentions a mode is never swallowed.
+ */
+export function opensPermissionsWindow(command: string): boolean {
+  const name = command.startsWith('/') ? command.slice(1) : command
+  return name === 'gentle:mode' || name.startsWith('gentle:mode ') || name === 'gentle:yolo' || name.startsWith('gentle:yolo ')
+}

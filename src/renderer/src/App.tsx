@@ -11,6 +11,7 @@ import { PromptPanel } from './components/PromptPanel.tsx'
 import { Rail } from './components/Rail.tsx'
 import { SetupWizard } from './components/SetupWizard.tsx'
 import { Transcript } from './components/Transcript.tsx'
+import { opensPermissionsWindow } from './state/permissionModes.ts'
 import { useEngine } from './state/useEngine.ts'
 
 /** The terminal folds its rail below this many columns of available width. */
@@ -211,8 +212,7 @@ export function App(): React.JSX.Element {
   // tells nothing the Permissions window cannot. They open the window instead.
   const runCommand = useCallback(
     (command: string) => {
-      const name = command.startsWith('/') ? command.slice(1) : command
-      if (name === 'gentle:mode' || name.startsWith('gentle:mode ') || name === 'gentle:yolo' || name.startsWith('gentle:yolo ')) {
+      if (opensPermissionsWindow(command)) {
         openPermissions()
         return
       }
