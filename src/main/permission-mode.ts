@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
-import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { AgentPermissionMode } from '../shared/ipc.ts'
+import { currentDesktopConfigHome } from './config-home.ts'
 
 /**
  * Reads the agent's permission mode the way gentle-pi persists it.
@@ -18,9 +18,13 @@ export function permissionModeFile(configHome: string): string {
   return join(configHome, 'permission-mode.json')
 }
 
+/**
+ * The folder the desktop resolves: the same store the Models window reads and the
+ * engine is launched against (see launch.ts). Delegated, not duplicated, so the app and
+ * the engine can never drift apart again.
+ */
 export function resolveConfigHome(): string {
-  const override = process.env['GENTLE_SHELL_CONFIG_HOME']
-  return override ? override : join(homedir(), '.gentle-shell', 'gentle-ai')
+  return currentDesktopConfigHome()
 }
 
 const MODES: readonly AgentPermissionMode[] = ['normal', 'auto', 'yolo', 'super-yolo']

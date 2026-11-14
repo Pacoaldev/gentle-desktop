@@ -1,14 +1,16 @@
 import type { CommandChoice } from '../../../shared/ipc.ts'
 
 /**
- * The Gentle window's contents (gentle-desktop S17), kept as a pure function so node can
- * pin it: the destinations a user reaches for when they want to change something about the
- * agent, resolved against the commands this engine actually exposes.
+ * The Gentle window's contents (gentle-desktop S17, S21), kept as a pure function so node
+ * can pin it: the destinations a user reaches for when they want to change something about
+ * the agent.
  *
- * Three of these are the app's own surfaces and always exist. The other two are engine
- * commands — profiles and permission mode — and they are only offered when the engine
- * reports the command. A row that runs a command the engine does not have is worse than a
- * missing row: the user presses it, a turn starts, and nothing happens.
+ * Every destination is the app's own surface. Profiles became the Models window (S21),
+ * which reads and writes the engine's real profile store over IPC instead of running an
+ * engine command, and the mode row opens the read-only Permissions window. The engine's
+ * command list is still accepted so pinned tests can prove no command changes the result,
+ * but no destination maps to a command anymore: a row here can never start a turn, so it
+ * can never press a button that does nothing.
  */
 
 export type GentleDestinationId = 'profiles' | 'mode' | 'folder' | 'subagents' | 'providers' | 'commands'
@@ -19,23 +21,8 @@ export interface GentleDestination {
   label: string
   /** One line that says what pressing it does. */
   detail: string
-  /** The command to run through the prompt path, or null for an app surface. */
+  /** Always null: every destination opens an app window. */
   command: string | null
-}
-
-/**
- * Finds the command a destination maps to.
- *
- * Matching is on the command name only, never the description: a description mentioning
- * "profile" does not make that command the profile picker. Engine commands arrive as
- * `gentle:profiles`, so a bare substring match is enough and a prefix would be brittle.
- */
-function findCommand(commands: readonly CommandChoice[], pattern: RegExp): string | null {
-  for (const command of commands) {
-    const name = typeof command.name === 'string' ? command.name.toLowerCase() : ''
-    if (name.length > 0 && pattern.test(name)) return command.name
-  }
-  return null
 }
 
 /**
@@ -43,30 +30,20 @@ function findCommand(commands: readonly CommandChoice[], pattern: RegExp): strin
  * behaves* come first, then where it works, who is working, where the keys live, and
  * finally the escape hatch to every command the engine has.
  */
-export function resolveGentleDestinations(commands: readonly CommandChoice[]): GentleDestination[] {
-  const destinations: GentleDestination[] = []
-
-  const profiles = findCommand(commands, /profile/)
-  if (profiles !== null) {
-    destinations.push({
+export function resolveGentleDestinations(_commands: readonly CommandChoice[]): GentleDestination[] {
+  return [
+    {
       id: 'profiles',
-      label: 'Profiles',
-      detail: 'Switch the model profile the agents run under',
-      command: profiles
-    })
-  }
-
-  const mode = findCommand(commands, /(^|[^a-z])(mode|permission)/)
-  if (mode !== null) {
-    destinations.push({
+      label: 'Models',
+      detail: 'Choose the model each agent and the orchestrator use',
+      command: null
+    },
+    {
       id: 'mode',
       label: 'Permission mode',
-      detail: 'Choose how often the agent asks before acting',
-      command: mode
-    })
-  }
-
-  destinations.push(
+      detail: 'See the mode new sessions start with, and how to change it',
+      command: null
+    },
     {
       id: 'folder',
       label: 'Choose a folder',
@@ -91,7 +68,5 @@ export function resolveGentleDestinations(commands: readonly CommandChoice[]): G
       detail: 'Everything this engine exposes, with a filter',
       command: null
     }
-  )
-
-  return destinations
+  ]
 }

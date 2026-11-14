@@ -15,10 +15,13 @@ import {
   type GentleApi,
   type HostStatus,
   type OddTaskFeature,
+  type OrchestratorWriteResult,
   type PromptRequest,
   type ProfileSummary,
   type ProviderChoice,
   type RepoStatus,
+  type RoutingWriteResult,
+  type RoutingView,
   type SessionStats,
   type SessionSummary,
   type StoredCustomProvider,
@@ -92,6 +95,15 @@ const api: GentleApi = {
     remove: (id: string) => ipcRenderer.invoke(IPC.customProvidersRemove, id) as Promise<CustomProviderResult>,
     testConnection: (input: ConnectionTestInput) =>
       ipcRenderer.invoke(IPC.customProvidersTest, input) as Promise<ConnectionTestResult>
+  },
+  routing: {
+    read: () => ipcRenderer.invoke(IPC.routingRead) as Promise<RoutingView>,
+    setAgentModel: (input: { profile: string; agent: string; model: string | null }) =>
+      ipcRenderer.invoke(IPC.routingSetAgentModel, input) as Promise<RoutingWriteResult>,
+    setOrchestrator: (input: { profile: string; model: string }) =>
+      ipcRenderer.invoke(IPC.routingSetOrchestrator, input) as Promise<OrchestratorWriteResult>,
+    setActive: (input: { profile: string }) =>
+      ipcRenderer.invoke(IPC.routingSetActive, input) as Promise<RoutingWriteResult>
   },
   session: {
     prompt: (message) =>

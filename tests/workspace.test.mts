@@ -5,7 +5,9 @@ import { join } from 'node:path'
 import { afterEach, test } from 'node:test'
 import {
   APP_FOLDER_LABEL,
+  chooseStartFolder,
   readRememberedWorkspace,
+  sameFolder,
   workspaceLabel,
   writeRememberedWorkspace
 } from '../src/main/workspace.ts'
@@ -70,8 +72,7 @@ test('a path with no last segment still shows something identifiable', () => {
   assert.equal(root.fullPath, '/')
 })
 
-test('the remembered folder record: valid, missing, unreadable or malformed', () => {
-  const stateDir = scratch()
+test('the remembered folder record: valid, missing, unreadable or malformed', () => {  const stateDir = scratch()
   assert.equal(readRememberedWorkspace(stateDir), null, 'a missing record is no choice yet')
 
   const folder = join(stateDir, 'projects', 'demo')
@@ -89,4 +90,61 @@ test('the remembered folder record: valid, missing, unreadable or malformed', ()
   // so the app falls back to its default instead of starting an engine that cannot run.
   writeFileSync(join(stateDir, 'workspace.json'), JSON.stringify({ folder: join(stateDir, 'deleted') }))
   assert.equal(readRememberedWorkspace(stateDir), null, 'a record for a deleted folder is no choice yet')
+})
+
+test('the folder the agent is already in counts as the same folder, however it is written', () => {
+  assert.equal(sameFolder('/work/demo', '/work/demo'), true)
+  assert.equal(sameFolder('/work/demo/', '/work/demo'), true, 'a trailing separator is the same folder')
+  assert.equal(sameFolder(String.raw`C:\work\demo`, 'C:/work/demo/'), true, 'the other separator is the same folder')
+  assert.equal(sameFolder('/work/demo', '/work/demo/sub'), false, 'a subfolder is a different folder')
+  assert.equal(sameFolder('/work/demo', '/work/other'), false)
+
+  // Case is part of the name everywhere except Windows, where the filesystem ignores it.
+  const caseFolded = process.platform === 'win32'
+  assert.equal(sameFolder(String.raw`C:\Work\Demo`, String.raw`c:\work\demo`), caseFolded)
+})
+
+
+test('a first launch with no remembered folder asks for one and remembers the answer', async () => {
+  let asked = 0
+  const chosen = await chooseStartFolder({
+    remembered: null,
+    override: null,
+    fallback: '/app',
+    ask: async () => {
+      asked += 1
+      return '/picked'
+    }
+  })
+
+  assert.deepEqual(chosen, { folder: '/picked', remember: true }, 'the chosen folder is started in and written down')
+  assert.equal(asked, 1, 'the app asked exactly once')
+})
+
+test('a remembered folder or an explicit override starts without asking', async () => {
+  let asked = 0
+  const ask = async () => {
+    asked += 1
+    return '/picked'
+  }
+
+  assert.deepEqual(
+    await chooseStartFolder({ remembered: '/before', override: null, fallback: '/app', ask }),
+    { folder: '/before', remember: false },
+    'the folder used last wins'
+  )
+  assert.deepEqual(
+    await chooseStartFolder({ remembered: null, override: '/scripted', fallback: '/app', ask }),
+    { folder: '/scripted', remember: false },
+    'an explicit folder is an instruction, not a first run'
+  )
+  assert.equal(asked, 0, 'a question nobody needs is not asked')
+})
+
+test('a cancelled first-run picker launches in the default folder and remembers nothing', async () => {
+  assert.deepEqual(
+    await chooseStartFolder({ remembered: null, override: null, fallback: '/app', ask: async () => null }),
+    { folder: '/app', remember: false },
+    'cancelling launches, but nothing is remembered that the user did not choose'
+  )
 })

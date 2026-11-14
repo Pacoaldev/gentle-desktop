@@ -1,12 +1,15 @@
 import { dirname, join } from 'node:path'
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell, type OpenDialogOptions } from 'electron'
 import {
   IPC,
   type AuthLoginRequest,
   type ConnectionTestInput,
   type CustomProviderInput,
   type HostStatus,
+  type OrchestratorWriteResult,
   type PromptRequest,
+  type RoutingView,
+  type RoutingWriteResult,
   type WorkspaceChangeResult
 } from '../shared/ipc.ts'
 import type { ExtensionUiResponse, RpcEvent } from '../shared/protocol.ts'
@@ -14,12 +17,21 @@ import type { AuthInteraction } from '@earendil-works/pi-ai'
 import { invalidateAuthRuntime } from './auth.ts'
 import { AuthPromptBridge } from './auth-bridge.ts'
 import { listProviderChoices, loginProvider, providerConfigured } from './auth.ts'
+import { currentDesktopConfigHome } from './config-home.ts'
 import {
   listCustomProviders,
   removeCustomProvider,
   saveCustomProvider,
   testConnection
 } from './custom-providers.ts'
+import {
+  applyOrchestratorDefault,
+  parseModelRef,
+  readRouting,
+  setActiveProfile,
+  setAgentModel,
+  setOrchestratorModel
+} from './model-routing.ts'
 import { listOddTasks } from './odd-tasks.ts'
 import { collectRepoStatus, emptyRepoStatus } from './repo.ts'
 import { readPermissionMode, resolveConfigHome } from './permission-mode.ts'
@@ -29,6 +41,7 @@ import { PiHost } from './rpc/host.ts'
 import { listSessions } from './sessions.ts'
 import {
   applicationDirectory,
+  chooseStartFolder,
   readRememberedWorkspace,
   writeRememberedWorkspace,
   workspaceLabel
@@ -61,10 +74,52 @@ function decorateStatus(status: HostStatus): HostStatus {
   return { ...status, cwdLabel: label.name }
 }
 
+/**
+ * Opens the system's own folder picker. The main process is the only side allowed to do
+ * this, and it is shared by the two moments that need it: the first-run question (S19),
+ * where there is no window yet, and a later folder change from the window that asked.
+ */
+async function showFolderPicker(owner: BrowserWindow | null, current: string | null): Promise<string | null> {
+  // `defaultPath` must be absent when there is no folder yet, not set to undefined.
+  const options: OpenDialogOptions = {
+    title: current === null ? 'Choose a folder to work in' : 'Choose a folder',
+    buttonLabel: current === null ? 'Work in this folder' : 'Choose this folder',
+    ...(current !== null ? { defaultPath: current } : {}),
+    properties: ['openDirectory', 'createDirectory']
+  }
+  const picked =
+    owner !== null && !owner.isDestroyed()
+      ? await dialog.showOpenDialog(owner, options)
+      : await dialog.showOpenDialog(options)
+
+  const folder = picked.filePaths[0]
+  return picked.canceled || folder === undefined ? null : folder
+}
+
+/** Remembers a folder the engine actually started in; a failed write only costs the next launch its default. */
+function rememberWorkspace(folder: string): void {
+  try {
+    writeRememberedWorkspace(stateDir(), folder)
+  } catch (error) {
+    process.stderr.write(
+      `[workspace] cannot remember the folder: ${error instanceof Error ? error.message : String(error)}\n`
+    )
+  }
+}
+
 function broadcast(channel: string, payload: unknown): void {
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) window.webContents.send(channel, payload)
   }
+}
+
+/** Error text for the renderer: a plain sentence, never a stack trace or a full path. */
+function describeError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function routingFailure(error: unknown): { ok: false; error: string } {
+  return { ok: false, error: `The profiles file could not be changed: ${describeError(error)}` }
 }
 
 /**
@@ -104,33 +159,17 @@ function registerIpc(instance: PiHost): void {
   ipcMain.handle(IPC.hostRestart, async () => decorateStatus(await instance.restart()))
 
   ipcMain.handle(IPC.workspaceChoose, async (event): Promise<WorkspaceChangeResult> => {
-    const current = instance.status().cwd
-    // `defaultPath` must be absent when there is no folder yet, not set to undefined.
-    const options = {
-      title: 'Choose a folder',
-      buttonLabel: 'Choose this folder',
-      ...(current !== undefined ? { defaultPath: current } : {}),
-      properties: ['openDirectory', 'createDirectory'] as Array<'openDirectory' | 'createDirectory'>
-    }
     // The picker belongs to the window that asked for it, so it centres on that window.
     const owner = BrowserWindow.fromWebContents(event.sender)
-    const picked = owner !== null && !owner.isDestroyed() ? await dialog.showOpenDialog(owner, options) : await dialog.showOpenDialog(options)
-
-    const folder = picked.filePaths[0]
-    if (picked.canceled || folder === undefined) return { outcome: 'cancelled' }
+    const folder = await showFolderPicker(owner, instance.status().cwd ?? null)
+    if (folder === null) return { outcome: 'cancelled' }
 
     const change = await instance.changeDirectory(folder)
     if (change.outcome !== 'changed') return change
 
     // Only a folder the engine actually started in is remembered; a failed start must
     // not survive an app restart.
-    try {
-      writeRememberedWorkspace(stateDir(), folder)
-    } catch (error) {
-      // The session works in the chosen folder either way; the choice is simply not
-      // remembered for the next launch, which the next picker can redo.
-      process.stderr.write(`[workspace] cannot remember the folder: ${error instanceof Error ? error.message : String(error)}\n`)
-    }
+    rememberWorkspace(folder)
     return change
   })
 
@@ -258,6 +297,110 @@ function registerIpc(instance: PiHost): void {
 
   ipcMain.handle(IPC.customProvidersTest, async (_event, input: ConnectionTestInput) => testConnection(input))
 
+  // The routing store (S21) is read and written through the engine's own config home —
+  // the same folder the engine resolves — so the app and the engine never disagree about
+  // where profiles.json lives. Every answer is a value: nothing rejects with a raw stack,
+  // and error text names "the profiles file" or "the settings file", never a full path.
+  ipcMain.handle(IPC.routingRead, async (): Promise<RoutingView> => {
+    const configHome = currentDesktopConfigHome()
+    try {
+      return readRouting(configHome)
+    } catch (error) {
+      // The view has no error channel, so an unexpected read failure is reported as an
+      // unreadable store — the honest state for a window that shows what is on disk —
+      // and logged for diagnosis, never thrown at the renderer.
+      process.stderr.write(`[routing] cannot read the profiles file: ${describeError(error)}\n`)
+      return { configHome, fileStatus: 'invalid', active: null, profiles: [] }
+    }
+  })
+
+  ipcMain.handle(
+    IPC.routingSetAgentModel,
+    async (_event, input: { profile: string; agent: string; model: string | null }): Promise<RoutingWriteResult> => {
+      try {
+        return setAgentModel(currentDesktopConfigHome(), input.profile, input.agent, input.model)
+      } catch (error) {
+        return routingFailure(error)
+      }
+    }
+  )
+
+  ipcMain.handle(
+    IPC.routingSetOrchestrator,
+    async (_event, input: { profile: string; model: string }): Promise<OrchestratorWriteResult> => {
+      // The store write is the durable intent: it happens first and stays even when the
+      // live change to the running session cannot be applied, which is then reported
+      // instead of being mistaken for a failed save.
+      //
+      // Pi's settings.json is the ACTIVE profile's orchestrator default (it is only read
+      // inside activation), and the live model belongs to the running session. A profile
+      // that is not the store's active one owns neither, so both are left untouched.
+      let write: ReturnType<typeof setOrchestratorModel>
+      try {
+        write = setOrchestratorModel(currentDesktopConfigHome(), input.profile, input.model)
+      } catch (error) {
+        return routingFailure(error)
+      }
+      if (!write.ok) return write
+      if (!write.profileActive) return { ok: true, profileActive: false }
+
+      const home = agentHome()
+      if (!home) {
+        return {
+          ok: true,
+          profileActive: true,
+          appliedLive: false,
+          error: 'The engine is not running yet, so the model was saved but is not live in a session.'
+        }
+      }
+      try {
+        const applied = applyOrchestratorDefault(home, input.model)
+        if (!applied.ok) {
+          return { ok: true, profileActive: true, appliedLive: false, error: applied.error }
+        }
+      } catch (error) {
+        return {
+          ok: true,
+          profileActive: true,
+          appliedLive: false,
+          error: `The model was saved, but the settings file could not be updated: ${describeError(error)}`
+        }
+      }
+
+      const reference = parseModelRef(input.model)
+      if (reference === null) {
+        return {
+          ok: true,
+          profileActive: true,
+          appliedLive: false,
+          error: 'The model was saved, but it is not a provider/id pair, so the running session was not changed.'
+        }
+      }
+      try {
+        await instance.setModel(reference.provider, reference.id)
+        return { ok: true, profileActive: true, appliedLive: true }
+      } catch (error) {
+        return {
+          ok: true,
+          profileActive: true,
+          appliedLive: false,
+          error: `The model was saved, but the running session could not switch to it: ${describeError(error)}`
+        }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    IPC.routingSetActive,
+    async (_event, input: { profile: string }): Promise<RoutingWriteResult> => {
+      try {
+        return setActiveProfile(currentDesktopConfigHome(), input.profile)
+      } catch (error) {
+        return routingFailure(error)
+      }
+    }
+  )
+
   ipcMain.on(IPC.authAnswer, (_event, payload: { requestId: string; value: string | null }) => {
     authBridge?.answer(payload.requestId, payload.value)
   })
@@ -319,19 +462,37 @@ function createWindow(): BrowserWindow {
 // installer registers; the two strings are the only copy of this identity.
 app.setAppUserModelId('dev.gentledesktop.app')
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   host = createHost()
   registerIpc(host)
-  createWindow()
 
   // The user's remembered choice wins over the environment override: it is the folder
-  // they picked on purpose. With no choice yet (S17, first run) the default still stands,
-  // but the header now says when that default is the application's own directory.
-  const remembered = readRememberedWorkspace(stateDir())
-  const cwd = remembered ?? process.env['GENTLE_DESKTOP_CWD'] ?? process.cwd()
+  // they picked on purpose. With no choice yet (S17, first run) and no override, the app
+  // asks for a folder before it starts (S19): working in its own installation directory
+  // is not something a person can make sense of. A cancelled picker still launches, and
+  // the header says plainly that the folder is the app's own.
+  const startFolder = await chooseStartFolder({
+    remembered: readRememberedWorkspace(stateDir()),
+    override: process.env['GENTLE_DESKTOP_CWD'] ?? null,
+    fallback: process.cwd(),
+    ask: async () => {
+      try {
+        return await showFolderPicker(null, null)
+      } catch (error) {
+        process.stderr.write(
+          `[workspace] cannot ask for a folder: ${error instanceof Error ? error.message : String(error)}\n`
+        )
+        return null
+      }
+    }
+  })
+  if (startFolder.remember) rememberWorkspace(startFolder.folder)
 
-  // The engine starts with the app: the window is the only surface the user needs.
-  host.start({ cwd, moduleBase: __dirname })
+  // The engine starts before the window exists, so the window's first questions always
+  // reach a child instead of a stopped host — a window that mounts first logs failed
+  // session queries while the folder question is still open.
+  host.start({ cwd: startFolder.folder, moduleBase: __dirname })
+  createWindow()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

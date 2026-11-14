@@ -10,6 +10,7 @@ import type {
 } from '../../shared/protocol.ts'
 import { buildLaunchPlan, LaunchResolutionError, type LaunchOptions } from './launch.ts'
 import { RpcTransport } from './transport.ts'
+import { sameFolder } from '../workspace.ts'
 
 export interface PiHostListener {
   onStatus: (status: HostStatus) => void
@@ -138,14 +139,22 @@ export class PiHost {
   }
 
   /**
-   * Moves the engine to a new working folder (S17) through the same bounded restart the
-   * UI already has. The session file is captured before the first stop, so the
-   * conversation survives even the failure path: when the engine cannot become ready in
-   * the chosen folder, the previous folder is restarted with the same session, and the
-   * caller tells the user why the move failed instead of leaving a silent window.
+   * Moves the engine to a new working folder (S17, S18) through the same bounded restart the
+   * UI already has.
+   *
+   * A new folder is a new piece of work: the new child starts its own fresh session and the
+   * previous conversation is left on disk as history. The session file is therefore not
+   * re-opened here — only the failure path re-opens it, because a move that never happened
+   * must leave the user where they were. Picking the folder the engine is already in is not
+   * a move at all: no restart, no new session.
    */
   async changeDirectory(cwd: string): Promise<WorkspaceChangeResult> {
     const previousCwd = this.#options.cwd ?? null
+    if (previousCwd !== null && sameFolder(previousCwd, cwd)) {
+      return { outcome: 'unchanged', cwd: previousCwd }
+    }
+
+    // Captured for the failure path only, so it must be read before the current child stops.
     let sessionFile: string | null = null
     try {
       sessionFile = (await this.sessionState())?.sessionFile ?? null
@@ -153,13 +162,14 @@ export class PiHost {
       sessionFile = null
     }
 
-    const moved = await this.restart({ cwd }, sessionFile)
+    // `null` skips the reopen: the new child begins a session of its own in the new folder.
+    const moved = await this.restart({ cwd }, null)
     if (moved.phase === 'ready') {
       return { outcome: 'changed', cwd }
     }
 
     const error = moved.detail ?? 'the engine could not start in the chosen folder'
-    if (previousCwd !== null && previousCwd !== cwd) {
+    if (previousCwd !== null) {
       await this.restart({ cwd: previousCwd }, sessionFile)
       return { outcome: 'failed', error, cwd: previousCwd }
     }

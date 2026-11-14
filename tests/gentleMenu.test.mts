@@ -5,20 +5,32 @@ import { resolveGentleDestinations } from '../src/renderer/src/state/gentleMenu.
 const profileCommand = { name: 'gentle:profiles', description: 'Choose an agent model profile' }
 const modeCommand = { name: 'gentle:permission', description: 'Set the permission mode' }
 
-test('profiles and mode appear only when the engine exposes them', () => {
+const ALL_IDS = ['profiles', 'mode', 'folder', 'subagents', 'providers', 'commands']
+
+test('profiles is always present, as the app\'s own Models surface', () => {
   const withCommands = resolveGentleDestinations([profileCommand, modeCommand])
   assert.deepEqual(
     withCommands.map((destination) => destination.id),
-    ['profiles', 'mode', 'folder', 'subagents', 'providers', 'commands']
+    ALL_IDS
   )
-  assert.equal(withCommands[0]?.command, 'gentle:profiles')
-  assert.equal(withCommands[1]?.command, 'gentle:permission')
+  assert.equal(withCommands[0]?.label, 'Models')
+  assert.equal(withCommands[0]?.detail, 'Choose the model each agent and the orchestrator use')
+  assert.equal(
+    withCommands[0]?.command,
+    null,
+    'the Models row opens the app\'s own window over the engine\'s store, it does not start a turn'
+  )
+  assert.equal(
+    withCommands[1]?.command,
+    null,
+    'the mode row opens a read-only window, it does not start a turn'
+  )
 
   const withoutCommands = resolveGentleDestinations([])
   assert.deepEqual(
     withoutCommands.map((destination) => destination.id),
-    ['folder', 'subagents', 'providers', 'commands'],
-    'a row that runs a command the engine does not have is worse than a missing row'
+    ALL_IDS,
+    'the Models window reads the store over IPC, so it does not need the engine\'s command list'
   )
 })
 
@@ -26,7 +38,11 @@ test('a destination is matched by command name, never by description', () => {
   const tempting = { name: 'gentle:review', description: 'Review the profile of the change' }
   const ids = resolveGentleDestinations([tempting]).map((destination) => destination.id)
 
-  assert.deepEqual(ids, ['folder', 'subagents', 'providers', 'commands'], 'a description is not an identity')
+  assert.deepEqual(
+    ids,
+    ALL_IDS,
+    'a description is not an identity, and no destination is routed to an engine command anymore'
+  )
 })
 
 test('the app surfaces are always present, in a fixed order', () => {
@@ -35,9 +51,9 @@ test('the app surfaces are always present, in a fixed order', () => {
 
   assert.deepEqual(tail, ['subagents', 'providers', 'commands'])
   assert.deepEqual(
-    destinations.slice(-3).map((destination) => destination.command),
-    [null, null, null],
-    'these open an app window, they do not start a turn'
+    destinations.map((destination) => destination.command),
+    [null, null, null, null, null, null],
+    'every row opens an app window, none starts a turn'
   )
 })
 

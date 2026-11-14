@@ -273,11 +273,23 @@ export function useEngine(): EngineView {
   }, [])
 
   // Moving the engine to the chosen folder is the main process's work; the renderer only
-  // reports the outcome. A failed move must never be silent (S17): the toast says why and
-  // that the previous folder keeps working, without repeating the full path anywhere —
-  // the header tooltip is the only place that shows it.
+  // reports the outcome. A different folder is a new session (S18), so the transcript must
+  // stop showing the previous conversation: it is over, and stays on disk as history. A
+  // failed move must never be silent (S17): the toast says why and that the previous folder
+  // keeps working, without repeating the full path anywhere — the header tooltip is the
+  // only place that shows it. Picking the folder already in use changes nothing.
   const chooseWorkspace = useCallback(async (): Promise<WorkspaceChangeResult> => {
     const result = await window.gentle.workspace.choose()
+    if (result.outcome === 'changed') {
+      dispatch({ kind: 'reset' })
+      void window.gentle.session
+        .state()
+        .then((state) => {
+          setSessionState(state)
+          refreshShellData()
+        })
+        .catch(() => {})
+    }
     if (result.outcome === 'failed') {
       notifySeq.current += 1
       setNotice({
@@ -287,7 +299,7 @@ export function useEngine(): EngineView {
       })
     }
     return result
-  }, [])
+  }, [refreshShellData])
 
   return {
     status,

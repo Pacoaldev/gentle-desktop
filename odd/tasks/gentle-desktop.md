@@ -105,6 +105,53 @@ S17. The folder the agent works in is always visible, and the user can change it
     User's words: "acabo de caer en cuenta de un error, no se esta mostrando que carpeta en la
     que se va trabajar".
 
+S18. Choosing a different folder is a new piece of work, not a move: the engine starts a
+    fresh session in the chosen folder, and the active session ends there. The conversation
+    the previous folder had is not carried over — it stays on disk as history, reachable the
+    same way as any other saved session. The app still opens the folder used last, and the
+    folder picker stays available from the header and the menu. Choosing the folder the
+    agent is already in changes nothing: no restart, no new session. When the engine cannot
+    start in the chosen folder, the previous folder keeps working with its conversation
+    intact, and the user is told why.
+
+    User's words: "seguiremos con la configuracion de selecion de carpeta, al iniciar la app,
+    se iniciara la ultima carpeta que se uso, se dara la opcion de cambiar la carpeta, al
+    mometno de selecionar una carpeta diferente se iniciara una nueva sesion y se dara por
+    termiando la sesion activa".
+
+S19. With no folder remembered the app asks for one instead of opening in a folder of its
+    own: the first launch shows the system's own folder picker, and the folder the user
+    chooses is started in and becomes the remembered one. Cancelling still opens the app in
+    its default folder — which the header names plainly — and nothing is written down, so the
+    next launch asks again rather than keeping a folder nobody chose. A remembered folder
+    that no longer exists, or a record that cannot be read, counts as no folder remembered.
+    An explicit `GENTLE_DESKTOP_CWD` is an instruction and starts there without asking, so
+    scripted runs and the tests never wait for a person.
+
+    User's words: "si la app no tiene una carpeta como ultima visitada se requiere que pida
+    una carpeta para abrir".
+
+S20. The app never changes the session's permission mode, and says so instead of pretending
+    to. A Permissions window shows the four modes with the meaning the terminal gives them,
+    marks the mode saved as the default — the one a session started here begins with — and
+    states that raising the running session is reserved to an interactive terminal session.
+    The route that works is named exactly: `/gentle:mode default <mode>` in a terminal, which
+    the next session started here picks up. The Gentle row and the engine's mode commands
+    open this window instead of starting a turn that only prints a notice.
+
+    User's words: "continuemos con la creación de las ventanas flotantes, ya que aunque me
+    muestra las opciones no se estan mostrando las ventanas flotantes hijas de las opciones".
+    Evidence: gentle-pi `lib/yolo-session-policy.ts` gates `setMode` and `saveDefault` on
+    `interactive(ctx)` (ctx.mode === "tui"), so `/gentle:mode <mode>` answers "Mode unchanged"
+    over RPC, and the host-ui adapter path ends in the same gate.
+
+S21. The app reads and writes the same profile store the engine reads, and never a look-alike
+    in another folder. A Models window shows the profiles in that file, which one is active,
+    and the model each agent and the orchestrator use; changing a model is written to the
+    profile store, so the next session resolves it, and the orchestrator also changes live in
+    the running session. A malformed store is reported and left untouched instead of being
+    rewritten, and profile creation, renaming and deletion stay out of this slice.
+
 S7. The engine is consumed, not copied: the app launches the published `pi` runtime with
     gentle-pi's extensions enabled and `GENTLE_SHELL_INTERACTIVE_HOST=1`, so upstream
     engine fixes remain reachable. Engine code is vendored only for a patch that cannot
@@ -151,8 +198,17 @@ T31. [x] Read subscription usage from the provider's own quota endpoint with the
 T35. [x] Render subscription usage and the `sub` billing marker in the top bar. — S11
 T56. Render assistant output as Markdown: parser, React renderer without raw HTML, and a
     small fenced-code highlighter. User text stays literal. — S15
-T109. Show the working folder in the header and let the user pick another one, with the
-    choice remembered across launches. — S17
+T109. [x] Show the working folder in the header and let the user pick another one, with the
+    choice remembered across launches. Done in 71a31ee. — S17
+T110. Start a fresh session when the user picks a different folder, leaving the previous
+    conversation on disk; keep the app opening the last used folder. — S18
+T111. Ask for a folder on a launch that has none remembered, start in the chosen one and
+    remember it; never block a launched app on the question. — S19
+T112. Show the permission modes and the saved default in a floating window that never claims
+    to change the running session, and route the mode commands there. — S20
+T113. [x] Read and write the engine's real profile store: a Models window over per-agent and
+    orchestrator models, with the active profile and a live orchestrator change. Done in
+    905dcbe and dd5330f. — S21
 T13. Support providers that need a custom base URL by writing pi's own configuration,
     instead of asking the user to edit files. — S10
 T10. Distribution: installers a non-technical person can run, plus a short first-run guide
@@ -305,3 +361,31 @@ L19. User report, verbatim: "acabo de caer en cuenta de un error, no se esta mos
     carpeta en la que se va trabajar". The header rendered the folder name only when the
     engine reported a cwd, and the packaged app runs from its own installation directory,
     so the value was either meaningless or empty.
+
+L20. User requirement, verbatim: "seguiremos con la configuracion de selecion de carpeta, al
+    iniciar la app, se iniciara la ultima carpeta que se uso, se dara la opcion de cambiar la
+    carpeta, al mometno de selecionar una carpeta diferente se iniciara una nueva sesion y se
+    dara por termiando la sesion activa". Opening the last used folder and offering the picker
+    already shipped (71a31ee); the new rule is that a folder change starts a new session
+    instead of carrying the open conversation into the new folder.
+
+L21. User requirement, verbatim: "si la app no tiene una carpeta como ultima visitada se
+    requiere que pida una carpeta para abrir". A launch with nothing remembered opened in the
+    application's own directory and only said "this app's folder", which is a folder nobody
+    chose. The first run now asks with the system's picker and remembers the answer; a
+    cancelled picker still opens the app and asks again next time.
+
+L22. User requirement, verbatim: "continuemos con la creación de las ventanas flotantes, ya
+    que aunque me muestra las opciones no se estan mostrando las ventanas flotantes hijas de
+    las opciones para poder terminar de realizar los ajustes que requiere el usuario". The
+    surfaces the terminal opens with `ctx.ui.custom` cannot exist over RPC (pi returns
+    undefined there), so the first slice is permission mode: the engine grants elevated modes
+    only to an interactive terminal session, which makes the app a reader of the saved default
+    and the terminal the only place that changes it.
+
+L23. User report, verbatim: "no puedo ver la ventana apra configurar los perfiles, la cual me
+    permite selecionar los modelso que usare para cada agente y el orquestador". The store is
+    `profiles.json` in the engine's own config home, which the app resolved to a different
+    directory than the engine used; per-agent routing has a headless path (a session freezes
+    the active profile at its own start), so the desktop can write it, while the orchestrator
+    needs `set_model` for the live change and Pi's settings.json for future sessions.

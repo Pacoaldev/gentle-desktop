@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { buildLaunchPlan, declaresGentlePi } from '../src/main/rpc/launch.ts'
+import { resolveDesktopConfigHome, resolveGentleConfigHome } from '../src/main/config-home.ts'
+import { homedir } from 'node:os'
 
 const repoRoot = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
 const PI_ENTRY = join(repoRoot, 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'bundle', 'cli.js')
@@ -128,6 +130,90 @@ test('a missing pi runtime fails loudly instead of starting a dead engine', () =
   }
 })
 
+
+/**
+ * Sets the launch overrides plus the two config-home variables — deleting first, so the
+ * developer shell's own values cannot leak in — and restores every touched variable.
+ */
+function withLaunchEnvironment(
+  overrides: Record<string, string | undefined>
+): () => void {
+  const keys = [
+    'GENTLE_SHELL_HOME',
+    'GENTLE_DESKTOP_PI_ENTRY',
+    'GENTLE_DESKTOP_GENTLE_PI_ROOT',
+    'GENTLE_PI_CONFIG_HOME',
+    'GENTLE_SHELL_CONFIG_HOME'
+  ]
+  const previous = new Map<string, string | undefined>(keys.map((key) => [key, process.env[key]]))
+  for (const key of keys) delete process.env[key]
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value !== undefined) process.env[key] = value
+  }
+  return () => {
+    for (const [key, value] of previous) {
+      if (value === undefined) delete process.env[key]
+      else process.env[key] = value
+    }
+  }
+}
+
+const LAUNCH_OVERRIDES = {
+  GENTLE_DESKTOP_PI_ENTRY: PI_ENTRY,
+  GENTLE_DESKTOP_GENTLE_PI_ROOT: GENTLE_PI_ROOT
+}
+
+test('the launch plan points the engine at the same config home the desktop resolver picks', () => {
+  // A world without engine overrides: the desktop layer must decide, and the engine must
+  // land in the same store — not in ~/.pi/gentle-ai, where the user's profiles are not.
+  const shellStore = mkdtempSync(join(tmpdir(), 'gentle-desktop-config-'))
+  const restore = withLaunchEnvironment({ ...LAUNCH_OVERRIDES, GENTLE_SHELL_CONFIG_HOME: shellStore })
+
+  try {
+    const plan = buildLaunchPlan({ cwd: shellStore })
+
+    const appHome = resolveDesktopConfigHome(process.env, homedir(), existsSync)
+    assert.equal(
+      plan.env['GENTLE_SHELL_CONFIG_HOME'],
+      appHome,
+      'the child is told the exact directory the app resolved'
+    )
+    // The drift check: the engine's own order, applied to the child's env, must agree
+    // with the app's resolver. If the two ever diverge, the Models window and the engine
+    // would read different profiles.json files again.
+    assert.equal(resolveGentleConfigHome(plan.env, homedir()), appHome)
+    // The engine wrapper would see the marker too; the plan must not lie about it.
+    assert.equal(plan.env['GENTLE_PI_CONFIG_HOME'], undefined, 'no pi-level override is invented')
+  } finally {
+    restore()
+  }
+})
+
+test('the launch plan never shadows a GENTLE_PI_CONFIG_HOME that is already set', () => {
+  // When the engine already has an explicit home, that home wins inside the engine and
+  // the app follows it in resolveDesktopConfigHome; overwriting the launcher marker here
+  // would hide a real explicit value from layers that read it verbatim.
+  const explicit = mkdtempSync(join(tmpdir(), 'gentle-desktop-explicit-'))
+  const restore = withLaunchEnvironment({
+    ...LAUNCH_OVERRIDES,
+    GENTLE_PI_CONFIG_HOME: explicit
+  })
+
+  try {
+    const plan = buildLaunchPlan({ cwd: explicit })
+
+    const appHome = resolveDesktopConfigHome(process.env, homedir(), existsSync)
+    assert.equal(appHome, explicit, 'the desktop resolver follows the explicit engine home')
+    assert.equal(
+      plan.env['GENTLE_SHELL_CONFIG_HOME'],
+      undefined,
+      'the marker is not set, so the explicit home stays in charge'
+    )
+    assert.equal(resolveGentleConfigHome(plan.env, homedir()), appHome)
+  } finally {
+    restore()
+  }
+})
 
 test('the engine resolves without overrides, as the packaged app must', () => {
   // The env overrides exist for packagers and for these tests, which is exactly why they
