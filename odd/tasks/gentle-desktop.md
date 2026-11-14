@@ -145,6 +145,13 @@ S20. The app never changes the session's permission mode, and says so instead of
     `interactive(ctx)` (ctx.mode === "tui"), so `/gentle:mode <mode>` answers "Mode unchanged"
     over RPC, and the host-ui adapter path ends in the same gate.
 
+S21. The app reads and writes the same profile store the engine reads, and never a look-alike
+    in another folder. A Models window shows the profiles in that file, which one is active,
+    and the model each agent and the orchestrator use; changing a model is written to the
+    profile store, so the next session resolves it, and the orchestrator also changes live in
+    the running session. A malformed store is reported and left untouched instead of being
+    rewritten, and profile creation, renaming and deletion stay out of this slice.
+
 S7. The engine is consumed, not copied: the app launches the published `pi` runtime with
     gentle-pi's extensions enabled and `GENTLE_SHELL_INTERACTIVE_HOST=1`, so upstream
     engine fixes remain reachable. Engine code is vendored only for a patch that cannot
@@ -199,6 +206,9 @@ T111. Ask for a folder on a launch that has none remembered, start in the chosen
     remember it; never block a launched app on the question. — S19
 T112. Show the permission modes and the saved default in a floating window that never claims
     to change the running session, and route the mode commands there. — S20
+T113. [x] Read and write the engine's real profile store: a Models window over per-agent and
+    orchestrator models, with the active profile and a live orchestrator change. Done in
+    905dcbe and dd5330f. — S21
 T13. Support providers that need a custom base URL by writing pi's own configuration,
     instead of asking the user to edit files. — S10
 T10. Distribution: installers a non-technical person can run, plus a short first-run guide
@@ -372,3 +382,10 @@ L22. User requirement, verbatim: "continuemos con la creación de las ventanas f
     undefined there), so the first slice is permission mode: the engine grants elevated modes
     only to an interactive terminal session, which makes the app a reader of the saved default
     and the terminal the only place that changes it.
+
+L23. User report, verbatim: "no puedo ver la ventana apra configurar los perfiles, la cual me
+    permite selecionar los modelso que usare para cada agente y el orquestador". The store is
+    `profiles.json` in the engine's own config home, which the app resolved to a different
+    directory than the engine used; per-agent routing has a headless path (a session freezes
+    the active profile at its own start), so the desktop can write it, while the orchestrator
+    needs `set_model` for the live change and Pi's settings.json for future sessions.
