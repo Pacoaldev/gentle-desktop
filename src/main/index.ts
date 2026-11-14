@@ -6,7 +6,10 @@ import {
   type ConnectionTestInput,
   type CustomProviderInput,
   type HostStatus,
+  type OrchestratorWriteResult,
   type PromptRequest,
+  type RoutingView,
+  type RoutingWriteResult,
   type WorkspaceChangeResult
 } from '../shared/ipc.ts'
 import type { ExtensionUiResponse, RpcEvent } from '../shared/protocol.ts'
@@ -14,12 +17,21 @@ import type { AuthInteraction } from '@earendil-works/pi-ai'
 import { invalidateAuthRuntime } from './auth.ts'
 import { AuthPromptBridge } from './auth-bridge.ts'
 import { listProviderChoices, loginProvider, providerConfigured } from './auth.ts'
+import { currentDesktopConfigHome } from './config-home.ts'
 import {
   listCustomProviders,
   removeCustomProvider,
   saveCustomProvider,
   testConnection
 } from './custom-providers.ts'
+import {
+  applyOrchestratorDefault,
+  parseModelRef,
+  readRouting,
+  setActiveProfile,
+  setAgentModel,
+  setOrchestratorModel
+} from './model-routing.ts'
 import { listOddTasks } from './odd-tasks.ts'
 import { collectRepoStatus, emptyRepoStatus } from './repo.ts'
 import { readPermissionMode, resolveConfigHome } from './permission-mode.ts'
@@ -99,6 +111,15 @@ function broadcast(channel: string, payload: unknown): void {
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) window.webContents.send(channel, payload)
   }
+}
+
+/** Error text for the renderer: a plain sentence, never a stack trace or a full path. */
+function describeError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function routingFailure(error: unknown): { ok: false; error: string } {
+  return { ok: false, error: `The profiles file could not be changed: ${describeError(error)}` }
 }
 
 /**
@@ -275,6 +296,110 @@ function registerIpc(instance: PiHost): void {
   })
 
   ipcMain.handle(IPC.customProvidersTest, async (_event, input: ConnectionTestInput) => testConnection(input))
+
+  // The routing store (S21) is read and written through the engine's own config home —
+  // the same folder the engine resolves — so the app and the engine never disagree about
+  // where profiles.json lives. Every answer is a value: nothing rejects with a raw stack,
+  // and error text names "the profiles file" or "the settings file", never a full path.
+  ipcMain.handle(IPC.routingRead, async (): Promise<RoutingView> => {
+    const configHome = currentDesktopConfigHome()
+    try {
+      return readRouting(configHome)
+    } catch (error) {
+      // The view has no error channel, so an unexpected read failure is reported as an
+      // unreadable store — the honest state for a window that shows what is on disk —
+      // and logged for diagnosis, never thrown at the renderer.
+      process.stderr.write(`[routing] cannot read the profiles file: ${describeError(error)}\n`)
+      return { configHome, fileStatus: 'invalid', active: null, profiles: [] }
+    }
+  })
+
+  ipcMain.handle(
+    IPC.routingSetAgentModel,
+    async (_event, input: { profile: string; agent: string; model: string | null }): Promise<RoutingWriteResult> => {
+      try {
+        return setAgentModel(currentDesktopConfigHome(), input.profile, input.agent, input.model)
+      } catch (error) {
+        return routingFailure(error)
+      }
+    }
+  )
+
+  ipcMain.handle(
+    IPC.routingSetOrchestrator,
+    async (_event, input: { profile: string; model: string }): Promise<OrchestratorWriteResult> => {
+      // The store write is the durable intent: it happens first and stays even when the
+      // live change to the running session cannot be applied, which is then reported
+      // instead of being mistaken for a failed save.
+      //
+      // Pi's settings.json is the ACTIVE profile's orchestrator default (it is only read
+      // inside activation), and the live model belongs to the running session. A profile
+      // that is not the store's active one owns neither, so both are left untouched.
+      let write: ReturnType<typeof setOrchestratorModel>
+      try {
+        write = setOrchestratorModel(currentDesktopConfigHome(), input.profile, input.model)
+      } catch (error) {
+        return routingFailure(error)
+      }
+      if (!write.ok) return write
+      if (!write.profileActive) return { ok: true, profileActive: false }
+
+      const home = agentHome()
+      if (!home) {
+        return {
+          ok: true,
+          profileActive: true,
+          appliedLive: false,
+          error: 'The engine is not running yet, so the model was saved but is not live in a session.'
+        }
+      }
+      try {
+        const applied = applyOrchestratorDefault(home, input.model)
+        if (!applied.ok) {
+          return { ok: true, profileActive: true, appliedLive: false, error: applied.error }
+        }
+      } catch (error) {
+        return {
+          ok: true,
+          profileActive: true,
+          appliedLive: false,
+          error: `The model was saved, but the settings file could not be updated: ${describeError(error)}`
+        }
+      }
+
+      const reference = parseModelRef(input.model)
+      if (reference === null) {
+        return {
+          ok: true,
+          profileActive: true,
+          appliedLive: false,
+          error: 'The model was saved, but it is not a provider/id pair, so the running session was not changed.'
+        }
+      }
+      try {
+        await instance.setModel(reference.provider, reference.id)
+        return { ok: true, profileActive: true, appliedLive: true }
+      } catch (error) {
+        return {
+          ok: true,
+          profileActive: true,
+          appliedLive: false,
+          error: `The model was saved, but the running session could not switch to it: ${describeError(error)}`
+        }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    IPC.routingSetActive,
+    async (_event, input: { profile: string }): Promise<RoutingWriteResult> => {
+      try {
+        return setActiveProfile(currentDesktopConfigHome(), input.profile)
+      } catch (error) {
+        return routingFailure(error)
+      }
+    }
+  )
 
   ipcMain.on(IPC.authAnswer, (_event, payload: { requestId: string; value: string | null }) => {
     authBridge?.answer(payload.requestId, payload.value)

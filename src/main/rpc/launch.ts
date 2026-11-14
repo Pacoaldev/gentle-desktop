@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
+import { resolveDesktopConfigHome } from '../config-home.ts'
 
 /** Marks this pi child as an interactive RPC host (exact match `"1"`). */
 export const INTERACTIVE_HOST_ENV = 'GENTLE_SHELL_INTERACTIVE_HOST'
@@ -148,6 +149,17 @@ export function buildLaunchPlan(options: LaunchOptions = {}): LaunchPlan {
   const gentlePiRoot = resolveGentlePiRoot(options.moduleBase)
   const cwd = resolve(options.cwd ?? process.cwd())
 
+  // The engine must read the store the Models window writes: without this, the child
+  // would fall back to ~/.pi/gentle-ai while the app resolves ~/.gentle-shell/gentle-ai
+  // (resolveDesktopConfigHome's own desktop layer), and the user's profiles would be
+  // invisible to the engine. The resolved directory is advertised through the launcher
+  // marker the engine already honours — but never when GENTLE_PI_CONFIG_HOME is set,
+  // because that variable wins inside the engine and must not be shadowed, and never
+  // as an empty string, which the engine would treat as unset anyway.
+  const desktopConfigHome = resolveDesktopConfigHome(process.env, homedir(), existsSync)
+  const engineEnv: NodeJS.ProcessEnv = { ...process.env }
+  if (!engineEnv['GENTLE_PI_CONFIG_HOME']) engineEnv['GENTLE_SHELL_CONFIG_HOME'] = desktopConfigHome
+
   const extensionArgs: string[] = []
   if (options.takeOverExtensions) {
     extensionArgs.push('--no-extensions', '-e', gentlePiRoot)
@@ -160,7 +172,7 @@ export function buildLaunchPlan(options: LaunchOptions = {}): LaunchPlan {
     command: process.execPath,
     args: [piEntry, '--mode', 'rpc', ...extensionArgs],
     env: {
-      ...process.env,
+      ...engineEnv,
       ELECTRON_RUN_AS_NODE: '1',
       PI_CODING_AGENT_DIR: home,
       [AGENT_HOME_ENV]: home,

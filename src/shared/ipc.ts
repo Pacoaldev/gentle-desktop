@@ -47,7 +47,11 @@ export const IPC = {
   customProvidersList: 'custom-providers:list',
   customProvidersSave: 'custom-providers:save',
   customProvidersRemove: 'custom-providers:remove',
-  customProvidersTest: 'custom-providers:test-connection'
+  customProvidersTest: 'custom-providers:test-connection',
+  routingRead: 'routing:read',
+  routingSetAgentModel: 'routing:set-agent-model',
+  routingSetOrchestrator: 'routing:set-orchestrator',
+  routingSetActive: 'routing:set-active'
 } as const
 
 export type HostPhase = 'starting' | 'ready' | 'restarting' | 'crashed' | 'stopped'
@@ -254,6 +258,50 @@ export interface ConnectionTestResult {
   message: string
 }
 
+/** One model routing role inside a profile: the reserved `orchestrator` key or an agent. */
+export interface RoutingRole {
+  name: string
+  /** The `provider/id` pair the profile stores, or null when the role inherits. */
+  model: string | null
+  /** A thinking level the role pins, or null when it inherits. */
+  thinking: string | null
+}
+
+/** One profile of the engine's routing store, with its roles expanded for display. */
+export interface RoutingProfile {
+  name: string
+  active: boolean
+  /** The profile's orchestrator selection — a reserved role, never an agent. */
+  orchestrator: RoutingRole
+  /** The agent roles, sorted by name. */
+  agents: RoutingRole[]
+}
+
+/**
+ * A view over the engine's real profile store (`profiles.json` in its own config home).
+ * `fileStatus` distinguishes "no store yet" from "a store this app refuses to guess about",
+ * because a malformed store must be reported and left untouched instead of rewritten.
+ */
+export interface RoutingView {
+  configHome: string
+  fileStatus: 'missing' | 'valid' | 'invalid'
+  active: string | null
+  profiles: RoutingProfile[]
+}
+
+/** Every routing write answers as a value the renderer can show; nothing rejects with a raw stack. */
+export type RoutingWriteResult = { ok: true } | { ok: false; error: string }
+
+/**
+ * Result of changing the orchestrator model. `profileActive` says whether the edited
+ * profile is the store's active one; only then is the live session touched and
+ * `appliedLive` meaningful. The store write is the durable intent and stays even when the
+ * live change fails, which is then reported through `error` without failing the write.
+ */
+export type OrchestratorWriteResult =
+  | { ok: true; profileActive: boolean; appliedLive?: boolean; error?: string }
+  | { ok: false; error: string }
+
 export type AuthMethod = 'oauth' | 'api_key'
 
 export interface AuthLoginRequest {
@@ -354,5 +402,12 @@ export interface GentleApi {
     save: (input: CustomProviderInput) => Promise<CustomProviderResult>
     remove: (id: string) => Promise<CustomProviderResult>
     testConnection: (input: ConnectionTestInput) => Promise<ConnectionTestResult>
+  }
+  /** The engine's real routing store (S21): the profiles, the active one, and each role's model. */
+  routing: {
+    read: () => Promise<RoutingView>
+    setAgentModel: (input: { profile: string; agent: string; model: string | null }) => Promise<RoutingWriteResult>
+    setOrchestrator: (input: { profile: string; model: string }) => Promise<OrchestratorWriteResult>
+    setActive: (input: { profile: string }) => Promise<RoutingWriteResult>
   }
 }
