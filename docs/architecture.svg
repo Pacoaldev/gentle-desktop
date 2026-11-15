@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 500" width="920" height="500" role="img" aria-labelledby="archTitle archDesc" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+  <title id="archTitle">Gentle Desktop architecture</title>
+  <desc id="archDesc">A React renderer talks to the Electron main process over a typed context bridge. Main owns one supervised pi --mode rpc child over newline-delimited JSON. That engine runs with gentle-pi extensions loaded and the interactive host flag set.</desc>
+
+  <rect x="0" y="0" width="920" height="500" rx="16" fill="#f6f8fa"/>
+  <text x="40" y="44" font-size="12" font-weight="700" fill="#57606a" letter-spacing="1.2">GENTLE DESKTOP</text>
+
+  <!-- renderer -->
+  <rect x="40" y="60" width="840" height="104" rx="12" fill="#ffffff" stroke="#d0d7de" stroke-width="1.5"/>
+  <text x="68" y="92" font-size="16" font-weight="700" fill="#1f2328">renderer — React</text>
+  <text x="68" y="118" font-size="13" fill="#57606a">Transcript, tool cards, diffs, dialogs, composer, rail</text>
+  <text x="68" y="140" font-size="13" fill="#8c959f">No Node, no child process, no raw credentials</text>
+
+  <!-- bridge arrow -->
+  <line x1="460" y1="164" x2="460" y2="196" stroke="#0969da" stroke-width="2"/>
+  <path d="M455 190 L460 198 L465 190" fill="none" stroke="#0969da" stroke-width="2"/>
+  <path d="M455 170 L460 162 L465 170" fill="none" stroke="#0969da" stroke-width="2"/>
+  <text x="476" y="186" font-size="12.5" fill="#0969da" font-weight="600">typed contextBridge — explicit IPC calls only</text>
+
+  <!-- main -->
+  <rect x="40" y="198" width="840" height="104" rx="12" fill="#ffffff" stroke="#d0d7de" stroke-width="1.5"/>
+  <text x="68" y="230" font-size="16" font-weight="700" fill="#1f2328">main — Electron, Node</text>
+  <text x="68" y="256" font-size="13" fill="#57606a">Supervision, session listing, LF-only framing, folder moves, config writes</text>
+  <text x="68" y="278" font-size="13" fill="#8c959f">The only side allowed to spawn the engine, open a picker or touch a config file</text>
+
+  <!-- protocol arrow -->
+  <line x1="460" y1="302" x2="460" y2="334" stroke="#1a7f37" stroke-width="2"/>
+  <path d="M455 328 L460 336 L465 328" fill="none" stroke="#1a7f37" stroke-width="2"/>
+  <path d="M455 308 L460 300 L465 308" fill="none" stroke="#1a7f37" stroke-width="2"/>
+  <text x="476" y="324" font-size="12.5" fill="#1a7f37" font-weight="600">stdin/stdout · newline-delimited JSON, one record per line</text>
+
+  <!-- engine -->
+  <rect x="40" y="336" width="840" height="112" rx="12" fill="#ffffff" stroke="#d0d7de" stroke-width="1.5"/>
+  <text x="68" y="368" font-size="16" font-weight="700" fill="#1f2328">pi --mode rpc</text>
+  <text x="68" y="394" font-size="13" fill="#57606a">The engine, with gentle-pi extensions loaded: ODD, RDD, subagents, providers</text>
+  <rect x="68" y="406" width="330" height="26" rx="6" fill="#eef6ee" stroke="#1a7f37" stroke-width="1"/>
+  <text x="80" y="423" font-size="12" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" fill="#116329">GENTLE_SHELL_INTERACTIVE_HOST=1</text>
+  <text x="418" y="423" font-size="12.5" fill="#57606a">the flag gentle-pi already reads for non-terminal hosts</text>
+
+  <text x="40" y="481" font-size="12.5" fill="#8c959f">The engine is consumed, not reimplemented: bump the dependency to inherit upstream fixes.</text>
+</svg>
