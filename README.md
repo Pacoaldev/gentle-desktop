@@ -35,6 +35,27 @@ them.
 | Top bar | Model and thinking level, context usage, session cost, repository state, subscription quota, permission-mode badge |
 | Rail | Status and the ODD tasks this repository tracks, and nothing it has no data for |
 
+## What it looks like
+
+![The app: folder and branch in the header, action row, transcript, rail, composer](docs/screenshots/app.png)
+
+The app on a first session: the folder and branch it works in, the action row, the transcript,
+the rail with the engine state, and the composer.
+
+![The Gentle window: models, permission mode, folder, subagents, providers, all commands](docs/screenshots/gentle-menu.png)
+
+![The Models window: the active profile, the orchestrator model, and one row per agent](docs/screenshots/models.png)
+
+The Gentle window is the settings hub, and Models is where each agent and the orchestrator get
+their model. These captures use an example profile in a clean home, not a real set of
+credentials.
+
+![The Permissions window: the four modes with the saved default marked](docs/screenshots/permissions.png)
+
+Permissions explains what the app cannot do: the engine grants elevated modes only to an
+interactive terminal session, so the window shows the saved default and the terminal command
+that changes it.
+
 ## Quick start
 
 ```bash
@@ -183,7 +204,7 @@ message — Windows refuses to replace a mapped executable, and nothing warns yo
 | `src/shared/ipc.ts` | the main↔renderer contract |
 | `src/renderer/` | the React surface |
 | `odd/tasks/gentle-desktop.md` | the specification, task list and decision log for this fork |
-| `docs/` | the architecture, dialog-flow and folder-lifecycle diagrams in this README |
+| `docs/` | the diagrams and screenshots this README shows |
 | `design/` | the design system and the layout artboards this surface was built from |
 
 ## Upstream relationship
