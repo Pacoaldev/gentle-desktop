@@ -28,6 +28,15 @@ All notable changes to this repository are documented here. The format follows
   `ensureAgentSettingsForDesktop()` so the agent home gets (or updates)
   `settings.json` with `-builtin:codemode`, matching gentle-shell’s silent
   opt-out for owned homes.
+- **Installed vs portable fighting over the engine** — Two `Gentle Desktop.exe`
+  processes (NSIS install and `win-unpacked`) share the same `userData` and agent
+  home; the second copy often shows reconnect loops while the first looks fine. The
+  main process now uses Electron `requestSingleInstanceLock()`.
+- **Engine restart loop after install (`pi-pretty.ts`, missing `@heyhuynhgiabuu/pi-pretty`)** —
+  `gentle-pi` depends on `pi-pretty`, but electron-builder only ships top-level
+  dependencies. The packaged app could load `gentle-pi` extensions yet fail inside
+  `extensions/pi-pretty.ts`. `@heyhuynhgiabuu/pi-pretty` is now a direct dependency
+  and `verify-package.mjs` checks it is present.
 
 ### Added
 
@@ -49,5 +58,14 @@ All notable changes to this repository are documented here. The format follows
 3. Package an installer: `pnpm dist:installer` → `release/gentle-desktop-*-x64.exe`,
    or run `release/win-unpacked/Gentle Desktop.exe` without installing.
 4. Close any running dev instance before repackaging.
+5. After rebuilding the installer, **uninstall** the previous Gentle Desktop from
+   Windows settings (or install over a closed app). An old `0.1.0` build from before
+   these fixes looks like the original session failures (New / transport / codemode).
+6. The NSIS install and `win-unpacked` folder ship the **same** `Gentle Desktop.exe`
+   and `app.asar` (only the path differs). Do not run an installed copy and
+   `win-unpacked` at the same time — they share agent state and can fight over the
+   engine until a single-instance lock is in the build you run.
+7. Prefer portable use: `pnpm dist:portable` → `release/gentle-desktop-*-win.zip`, or run
+   `release-build2\\win-unpacked\\Gentle Desktop.exe` directly.
 
 [Unreleased]: https://github.com/leav-dev/gentle-desktop/compare/main...HEAD

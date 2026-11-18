@@ -59,6 +59,20 @@ let authBridge: AuthPromptBridge | null = null
  */
 const APP_DIRECTORY = applicationDirectory(app.getPath('exe'), app.isPackaged, process.cwd())
 
+// Installed and portable builds share userData and the agent home; two processes fight over
+// the same engine and Gentle Agents session locks on Windows.
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    const windows = BrowserWindow.getAllWindows()
+    if (windows.length === 0) return
+    const window = windows[0]
+    if (window.isMinimized()) window.restore()
+    window.focus()
+  })
+}
+
 /** The app's own state directory — where the chosen folder is remembered, never in a repo. */
 function stateDir(): string {
   return app.getPath('userData')
