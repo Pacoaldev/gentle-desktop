@@ -37,6 +37,8 @@ import { collectRepoStatus, emptyRepoStatus } from './repo.ts'
 import { readPermissionMode, resolveConfigHome } from './permission-mode.ts'
 import { readProfiles, resolveActiveProfile } from './profiles.ts'
 import { readSubscriptionUsage } from './subscription-usage.ts'
+import { ensureAgentSettingsForDesktop } from './agent-settings.ts'
+import { resolveAgentHome } from './rpc/launch.ts'
 import { PiHost } from './rpc/host.ts'
 import { listSessions } from './sessions.ts'
 import {
@@ -487,6 +489,14 @@ app.whenReady().then(async () => {
     }
   })
   if (startFolder.remember) rememberWorkspace(startFolder.folder)
+
+  try {
+    ensureAgentSettingsForDesktop(resolveAgentHome())
+  } catch (error) {
+    process.stderr.write(
+      `[agent] cannot prepare settings.json: ${error instanceof Error ? error.message : String(error)}\n`
+    )
+  }
 
   // The engine starts before the window exists, so the window's first questions always
   // reach a child instead of a stopped host — a window that mounts first logs failed
