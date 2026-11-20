@@ -12,3 +12,7 @@ release/
 release-nsis/
 # experimental output directories: never meant to be committed
 release-*/
+
+# Local agent notes kept out of version control
+/docs/nox-arch-prompt.md
+/docs/gentle-shell-subagents.md
